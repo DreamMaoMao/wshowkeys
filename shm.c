@@ -67,9 +67,8 @@ static const struct wl_buffer_listener buffer_listener = {
 	.release = buffer_release
 };
 
-static struct pool_buffer *create_buffer(struct wl_shm *shm,
-		struct pool_buffer *buf, int32_t width, int32_t height,
-		uint32_t format) {
+struct pool_buffer *create_buffer(struct wl_shm *shm, struct pool_buffer *buf,
+		int32_t width, int32_t height, uint32_t format) {
 	uint32_t stride = width * 4;
 	size_t size = stride * height;
 

@@ -20,6 +20,8 @@
 #include "wlr-layer-shell-unstable-v1-client-protocol.h"
 #include "xdg-output-unstable-v1-client-protocol.h"
 
+static struct pool_buffer buffer;
+
 struct wsk_keypress {
 	xkb_keysym_t sym;
 	char name[128];
@@ -56,9 +58,6 @@ struct wsk_state {
 	struct wl_surface *surface;
 	struct zwlr_layer_surface_v1 *layer_surface;
 	uint32_t width, height;
-	bool frame_scheduled, dirty;
-	struct pool_buffer buffers[2];
-	struct pool_buffer *current_buffer;
 	struct wsk_output *output, *outputs;
 
 	struct xkb_state *xkb_state;
@@ -160,7 +159,8 @@ static void render_frame(struct wsk_state *state) {
 			|| state->width == 0) {
 		// Reconfigure surface
 		if (width == 0 || height == 0) {
-			wl_surface_attach(state->surface, NULL, 0, 0);
+//			wl_surface_attach(state->surface, NULL, 0, 0);
+			;
 		} else {
 			zwlr_layer_surface_v1_set_size(
 					state->layer_surface, width / scale, height / scale);
@@ -171,14 +171,13 @@ static void render_frame(struct wsk_state *state) {
 		wl_surface_commit(state->surface);
 	} else if (height > 0) {
 		// Replay recording into shm and send it off
-		state->current_buffer = get_next_buffer(state->shm,
-				state->buffers, state->width * scale, state->height * scale);
-		if (!state->current_buffer) {
+		if (!create_buffer(state->shm, &buffer, state->width * scale,
+				state->height * scale, WL_SHM_FORMAT_ARGB8888)) {
 			cairo_surface_destroy(recorder);
 			cairo_destroy(cairo);
 			return;
 		}
-		cairo_t *shm = state->current_buffer->cairo;
+		cairo_t *shm = buffer.cairo;
 
 		cairo_save(shm);
 		cairo_set_operator(shm, CAIRO_OPERATOR_CLEAR);
@@ -190,17 +189,25 @@ static void render_frame(struct wsk_state *state) {
 
 		wl_surface_set_buffer_scale(state->surface, scale);
 		wl_surface_attach(state->surface,
-				state->current_buffer->buffer, 0, 0);
+				buffer.buffer, 0, 0);
 		wl_surface_damage_buffer(state->surface, 0, 0,
 				state->width, state->height);
 		wl_surface_commit(state->surface);
+		destroy_buffer(&buffer);
 	}
 }
 
+bool
+surface_is_configured(struct wsk_state *state)
+{
+	return (state->width && state->height);
+}
+
 static void set_dirty(struct wsk_state *state) {
-	if (state->frame_scheduled) {
-		state->dirty = true;
-	} else if (state->surface) {
+	if (!surface_is_configured(state)) {
+		return;
+	}
+	if (state->surface) {
 		render_frame(state);
 	}
 }
@@ -514,7 +521,7 @@ int main(int argc, char *argv[]) {
 	state.specialfg = 0xAAAAAAFF;
 	state.foreground = 0xFFFFFFFF;
 	state.font = "monospace 24";
-	state.timeout = 1;
+	state.timeout = 200;
 
 	int c;
 	while ((c = getopt(argc, argv, "hb:f:s:F:t:a:m:o:")) != -1) {
@@ -651,7 +658,7 @@ int main(int argc, char *argv[]) {
 
 		int timeout = -1;
 		if (state.keys) {
-			timeout = 100;
+			timeout = 200;
 		}
 
 		if (poll(pollfds, sizeof(pollfds) / sizeof(pollfds[0]), timeout) < 0) {
@@ -661,10 +668,9 @@ int main(int argc, char *argv[]) {
 
 		/* Clear out old keys */
 		struct timespec now;
+		struct wsk_keypress *key = state.keys;
 		clock_gettime(CLOCK_MONOTONIC, &now);
-		if (now.tv_sec >= state.last_key.tv_sec + state.timeout &&
-				now.tv_nsec >= state.last_key.tv_nsec) {
-			struct wsk_keypress *key = state.keys;
+		if (now.tv_sec > state.last_key.tv_sec + 1) {
 			while (key) {
 				struct wsk_keypress *next = key->next;
 				free(key);
@@ -672,6 +678,15 @@ int main(int argc, char *argv[]) {
 			}
 			state.keys = NULL;
 			set_dirty(&state);
+		} else if (now.tv_sec == state.last_key.tv_sec &&
+				now.tv_nsec > state.last_key.tv_nsec + (state.timeout * 1000000) ){
+				while (key) {
+					struct wsk_keypress *next = key->next;
+					free(key);
+					key = next;
+				}
+				state.keys = NULL;
+				set_dirty(&state);					
 		}
 
 		if ((pollfds[0].revents & POLLIN)) {

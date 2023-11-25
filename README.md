@@ -39,9 +39,14 @@ wshowkeys [-b|-f|-s #RRGGBB[AA]] [-F font] [-t timeout]
 - *-f #RRGGBB[AA]*: set foreground color
 - *-s #RRGGBB[AA]*: set color for special keys
 - *-F font*: set font (Pango format, e.g. 'monospace 24')
-- *-t timeout*: set timeout before clearing old keystrokes
+- *-t timeout*: set timeout before clearing old keystrokes(ms)
 - *-a top|left|right|bottom*: anchor the keystrokes to an edge. May be specified
   twice.
 - *-m margin*: set a margin (in pixels) from the nearest edge
 - *-o output*: request wshowkeys is shown on the specified output
   (unimplemented)
+
+example:
+```
+wshowkeys -a bottom -F 'monospace 40' -t 200
+```
