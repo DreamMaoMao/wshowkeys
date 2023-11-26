@@ -158,6 +158,26 @@ static void custome_key_name(char *name){
         strcpy(name, "⇩ ");
     } else if (strcmp(name, "Right") == 0) {
         strcpy(name, "⇨ ");
+    } else if (strcmp(name, "KP_Insert") == 0) {
+        strcpy(name, "0");
+    } else if (strcmp(name, "KP_End") == 0) {
+        strcpy(name, "1");
+    } else if (strcmp(name, "KP_Down") == 0) {
+        strcpy(name, "2");
+    } else if (strcmp(name, "KP_Next") == 0) {
+        strcpy(name, "3");
+    } else if (strcmp(name, "KP_Left") == 0) {
+        strcpy(name, "4");
+    } else if (strcmp(name, "KP_Begin") == 0) {
+        strcpy(name, "5");
+    } else if (strcmp(name, "KP_Right") == 0) {
+        strcpy(name, "6");
+    } else if (strcmp(name, "KP_Home") == 0) {
+        strcpy(name, "7");
+    } else if (strcmp(name, "KP_Up") == 0) {
+        strcpy(name, "8");
+    } else if (strcmp(name, "KP_Prior") == 0) {
+        strcpy(name, "9");
     }
 
 }
