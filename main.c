@@ -700,6 +700,16 @@ static uint32_t parse_color(const char *color) {
 	return res;
 }
 
+void clear_full_keylink(struct wsk_keypress *key,struct wsk_state *state) {
+	while (key) {
+		struct wsk_keypress *next = key->next;
+		free(key);
+		key = next;
+	}
+	state->keys = NULL;
+	set_dirty(state);
+}
+
 int main(int argc, char *argv[]) {
 	/* NOTICE: This code runs as root */
 	struct wsk_state state = { 0 };
@@ -879,24 +889,16 @@ int main(int argc, char *argv[]) {
 		int all_key_len = 0;
 
 		clock_gettime(CLOCK_MONOTONIC, &now);
-		if (now.tv_sec > state.last_key.tv_sec + 1) {
-			while (key) {
-				struct wsk_keypress *next = key->next;
-				free(key);
-				key = next;
-			}
-			state.keys = NULL;
-			set_dirty(&state);
-		} else if (now.tv_sec == state.last_key.tv_sec &&
+		// when reach timeout limit,clear full keylink
+		if (state.timeout < 1000 && now.tv_sec > state.last_key.tv_sec + 1) {
+			clear_full_keylink(key,&state);
+		} else if (state.timeout < 1000 && now.tv_sec == state.last_key.tv_sec &&
 				now.tv_nsec > state.last_key.tv_nsec + (state.timeout * 1000000) ){
-				while (key) {
-					struct wsk_keypress *next = key->next;
-					free(key);
-					key = next;
-				}
-				state.keys = NULL;
-				set_dirty(&state);					
+			clear_full_keylink(key,&state);			
+		} else if (state.timeout >= 1000 && now.tv_sec > state.last_key.tv_sec + (state.timeout/1000)) {
+			clear_full_keylink(key,&state);
 		} else {
+			//caulate whether output len is reach len max limit
 			char *temp_name = calloc(1, 129);
 			while (key) {
 				strcpy(temp_name,key->name);
@@ -910,11 +912,11 @@ int main(int argc, char *argv[]) {
 				key = next;
 			}
 			free(temp_name);
-			if(all_key_len > state.lenmax){
+			if(all_key_len > state.lenmax){ //reach len max limit
 				key = state.keys;
 				struct wsk_keypress *next = key->next;
-				free(key);
-				state.keys = next;
+				free(key); //del the begin key in keylink
+				state.keys = next; // next key become begin key in keylink
 				set_dirty(&state);					
 			}
 		}
