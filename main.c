@@ -45,6 +45,7 @@ struct wsk_state {
 	uint32_t foreground, background, specialfg;
 	const char *font;
 	int timeout;
+	int lenmax;
 
 	struct wl_display *display;
 	struct wl_registry *registry;
@@ -69,6 +70,19 @@ struct wsk_state {
 
 	bool run;
 };
+
+void logtofile(const char *fmt, ...) {
+  char buf[256];
+  char cmd[256];
+  va_list ap;
+  va_start(ap, fmt);
+  vsprintf((char *)buf, fmt, ap);
+  va_end(ap);
+  unsigned int i = strlen((const char *)buf);
+
+  sprintf(cmd, "echo '%.*s' >> ~/log", i, buf);
+  system(cmd);
+}
 
 static void cairo_set_source_u32(cairo_t *cairo, uint32_t color) {
 	cairo_set_source_rgba(cairo,
@@ -95,6 +109,52 @@ static cairo_subpixel_order_t to_cairo_subpixel_order(
 	return CAIRO_SUBPIXEL_ORDER_DEFAULT;
 }
 
+static const char *longstr = "󱁐 ⌫ ";
+
+static void custome_key_name(char *name){
+    if (strcmp(name, "Return") == 0) {
+        strcpy(name, "⏎ ");
+    } else if (strcmp(name, "space") == 0) {
+        strcpy(name, "󱁐 ");
+    } else if (strcmp(name, "Escape") == 0) {
+        strcpy(name, " Esc ");
+    } else if (strcmp(name, "Control_L") == 0) {
+        strcpy(name, " CTRL+");
+    } else if (strcmp(name, "Control_R") == 0) {
+        strcpy(name, " CTRL+");
+    } else if (strcmp(name, "Alt_L") == 0) {
+        strcpy(name, " Alt+");
+    } else if (strcmp(name, "Alt_R") == 0) {
+        strcpy(name, " Alt+");
+    } else if (strcmp(name, "Shift_L") == 0) {
+        strcpy(name, " Shift+");
+    } else if (strcmp(name, "Shift_R") == 0) {
+        strcpy(name, " Shift+");
+    } else if (strcmp(name, "Super_L") == 0) {
+        strcpy(name, " Super+");
+    } else if (strcmp(name, "Super_R") == 0) {
+        strcpy(name, " Super+");
+    } else if (strcmp(name, "Tab") == 0) {
+        strcpy(name, "Tab ");
+    } else if (strcmp(name, "backslash") == 0) {
+        strcpy(name, " Backslash ");
+    } else if (strcmp(name, "BackSpace") == 0) {
+        strcpy(name, "⌫ ");
+    } else if (strcmp(name, "Caps_Lock") == 0) {
+        strcpy(name, "Caps ");
+    } else if (strcmp(name, "Left") == 0) {
+        strcpy(name, "⇦ ");
+    } else if (strcmp(name, "Up") == 0) {
+        strcpy(name, "⇧ ");
+    } else if (strcmp(name, "Down") == 0) {
+        strcpy(name, "⇩ ");
+    } else if (strcmp(name, "Right") == 0) {
+        strcpy(name, "⇨ ");
+    }
+
+}
+
+
 static void render_to_cairo(cairo_t *cairo, struct wsk_state *state,
 		int scale, uint32_t *width, uint32_t *height) {
 	cairo_set_operator(cairo, CAIRO_OPERATOR_SOURCE);
@@ -104,7 +164,7 @@ static void render_to_cairo(cairo_t *cairo, struct wsk_state *state,
 	struct wsk_keypress *key = state->keys;
 	while (key) {
 		bool special = false;
-		const char *name = key->utf8;
+		char *name = key->utf8;
 		if (!name[0]) {
 			special = true;
 			cairo_set_source_u32(cairo, state->specialfg);
@@ -117,8 +177,9 @@ static void render_to_cairo(cairo_t *cairo, struct wsk_state *state,
 
 		int w, h;
 		if (special) {
-			get_text_size(cairo, state->font, &w, &h, NULL, scale, "%s+", name);
-			pango_printf(cairo, state->font, scale,  "%s+", name);
+			custome_key_name(name);
+			get_text_size(cairo, state->font, &w, &h, NULL, scale, "%s", name);
+			pango_printf(cairo, state->font, scale,  "%s", name);
 		} else {
 			get_text_size(cairo, state->font, &w, &h, NULL, scale, "%s", name);
 			pango_printf(cairo, state->font, scale,  "%s", name);
@@ -420,6 +481,7 @@ static const struct wl_registry_listener registry_listener = {
 	.global_remove = registry_global_remove,
 };
 
+//listen key keydown and record to keys link
 static void handle_libinput_event(struct wsk_state *state,
 		struct libinput_event *event) {
 	if (!state->xkb_state) {
@@ -454,6 +516,8 @@ static void handle_libinput_event(struct wsk_state *state,
 		keypress->sym = keysym;
 		xkb_keysym_get_name(keypress->sym, keypress->name,
 				sizeof(keypress->name));
+		// logtofile(keypress->name);
+		// logtofile("󱁐 󰌑");
 		if (xkb_state_key_get_utf8(state->xkb_state, keycode,
 				keypress->utf8, sizeof(keypress->utf8)) <= 0 ||
 				keypress->utf8[0] <= ' ') {
@@ -522,10 +586,14 @@ int main(int argc, char *argv[]) {
 	state.foreground = 0xFFFFFFFF;
 	state.font = "monospace 24";
 	state.timeout = 200;
+	state.lenmax = 100;
 
 	int c;
-	while ((c = getopt(argc, argv, "hb:f:s:F:t:a:m:o:")) != -1) {
+	while ((c = getopt(argc, argv, "hb:f:s:F:t:a:m:o:l:")) != -1) {
 		switch (c) {
+		case 'l':
+			state.lenmax = (int)*optarg;
+			break;
 		case 'b':
 			state.background = parse_color(optarg);
 			break;
@@ -561,7 +629,7 @@ int main(int argc, char *argv[]) {
 		default:
 			fprintf(stderr, "usage: wshowkeys [-b|-f|-s #RRGGBB[AA]] [-F font] "
 					"[-t timeout]\n\t[-a top|left|right|bottom] [-m margin] "
-					"[-o output]\n");
+					"[-o output]\n[-l lenmax]");
 			return 1;
 		}
 	}
@@ -669,6 +737,8 @@ int main(int argc, char *argv[]) {
 		/* Clear out old keys */
 		struct timespec now;
 		struct wsk_keypress *key = state.keys;
+		int all_key_len = 0;
+
 		clock_gettime(CLOCK_MONOTONIC, &now);
 		if (now.tv_sec > state.last_key.tv_sec + 1) {
 			while (key) {
@@ -687,6 +757,27 @@ int main(int argc, char *argv[]) {
 				}
 				state.keys = NULL;
 				set_dirty(&state);					
+		} else {
+			char *temp_name = calloc(1, 129);
+			while (key) {
+				strcpy(temp_name,key->name);
+				custome_key_name(temp_name);
+				if(strstr(longstr,temp_name)) {
+					all_key_len = all_key_len + 2;
+				} else {
+					all_key_len = all_key_len + strlen(temp_name);
+				}
+				struct wsk_keypress *next = key->next;
+				key = next;
+			}
+			free(temp_name);
+			if(all_key_len > state.lenmax){
+				key = state.keys;
+				struct wsk_keypress *next = key->next;
+				free(key);
+				state.keys = next;
+				set_dirty(&state);					
+			}
 		}
 
 		if ((pollfds[0].revents & POLLIN)) {
