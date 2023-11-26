@@ -126,7 +126,7 @@ static void custome_key_name(char *name){
     if (strcmp(name, "Return") == 0) {
         strcpy(name, "⏎ ");
     } else if (strcmp(name, "space") == 0) {
-        strcpy(name, "󱁐 ");
+        strcpy(name, "␣ ");
     } else if (strcmp(name, "Escape") == 0) {
         strcpy(name, " Esc ");
     } else if (strcmp(name, "Control_L") == 0) {

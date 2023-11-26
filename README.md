@@ -49,5 +49,5 @@ wshowkeys [-b|-f|-s #RRGGBB[AA]] [-F font] [-t timeout]
 
 example:
 ```
-wshowkeys -a bottom -F 'monospace 40' -t 500 -s '#73e155' -f  '#ecd29c' -l 60 
+wshowkeys -a bottom -F 'Sans Bold 40' -t 1000 -s '#73e155' -f  '#ecd29c' -l 60
 ```
