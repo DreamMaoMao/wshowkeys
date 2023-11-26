@@ -65,7 +65,11 @@ struct wsk_state {
 	struct xkb_context *xkb_context;
 	struct xkb_keymap *xkb_keymap;
 
-	struct wsk_keypress *keys;
+	struct wsk_keypress *keys; //the begin of the output keylink
+	struct timespec last_key;
+
+	bool run;
+	//state of function key
 	int ctrl_l_hold;
 	int ctrl_r_hold;
 	int alt_l_hold;
@@ -74,9 +78,6 @@ struct wsk_state {
 	int supre_r_hold;
 	int shift_l_hold;
 	int shift_r_hold;
-	struct timespec last_key;
-
-	bool run;
 };
 
 void logtofile(const char *fmt, ...) {
@@ -117,8 +118,10 @@ static cairo_subpixel_order_t to_cairo_subpixel_order(
 	return CAIRO_SUBPIXEL_ORDER_DEFAULT;
 }
 
+//Some characters take up more than one byte but only one place in space
 static const char *longstr = "󱁐 ⌫ \\ | ";
 
+//change default keyname to custom name
 static void custome_key_name(char *name){
     if (strcmp(name, "Return") == 0) {
         strcpy(name, "⏎ ");
@@ -190,7 +193,7 @@ static void custome_key_name(char *name){
 
 }
 
-
+//show key in keylink(begin at state->keys)
 static void render_to_cairo(cairo_t *cairo, struct wsk_state *state,
 		int scale, uint32_t *width, uint32_t *height) {
 	cairo_set_operator(cairo, CAIRO_OPERATOR_SOURCE);
@@ -201,7 +204,7 @@ static void render_to_cairo(cairo_t *cairo, struct wsk_state *state,
 	while (key) {
 		bool special = false;
 		char *name = key->utf8;
-		if (!name[0]) {
+		if (!name[0]) { //whether key is special key
 			special = true;
 			cairo_set_source_u32(cairo, state->specialfg);
 			name = key->name;
@@ -212,7 +215,7 @@ static void render_to_cairo(cairo_t *cairo, struct wsk_state *state,
 		cairo_move_to(cairo, *width, 0);
 
 		int w, h;
-		if (special) {
+		if (special) { 
 			custome_key_name(name);
 			get_text_size(cairo, state->font, &w, &h, NULL, scale, "%s", name);
 			pango_printf(cairo, state->font, scale,  "%s", name);
@@ -476,6 +479,7 @@ static const struct wl_output_listener wl_output_listener = {
 	.scale = output_scale,
 };
 
+//add keyboard event listen
 static void registry_global(void *data, struct wl_registry *wl_registry,
 		uint32_t name, const char *interface, uint32_t version) {
 	struct wsk_state *state = data;
@@ -517,7 +521,7 @@ static const struct wl_registry_listener registry_listener = {
 	.global_remove = registry_global_remove,
 };
 
-//listen key keydown and record to keys link
+//listen key keydown and record to keylink
 static void handle_libinput_event(struct wsk_state *state,
 		struct libinput_event *event) {
 	if (!state->xkb_state) {
@@ -555,6 +559,7 @@ static void handle_libinput_event(struct wsk_state *state,
 
 	switch (key_state) {
 	case LIBINPUT_KEY_STATE_RELEASED:
+		//if 'ctrl shift alt super' release, clear it's press state
 		if(strlen(keypress->name) > 2 && strstr("Control_LControl_RAlt_LAlt_RSuper_LSuper_RShift_LShift_RMeta_LMeta_R",keypress->name)){
 			if(strcmp(keypress->name,"Control_L")==0){
 				state->ctrl_l_hold = 0;
@@ -576,6 +581,7 @@ static void handle_libinput_event(struct wsk_state *state,
 		} 
 		break;
 	case LIBINPUT_KEY_STATE_PRESSED:
+		//if 'ctrl shift alt super' press,mark it's press state
 		if(strlen(keypress->name) > 2 && strstr("Control_LControl_RAlt_LAlt_RSuper_LSuper_RShift_LShift_RMeta_LMeta_R",keypress->name)){
 			if(strcmp(keypress->name,"Control_L")==0){
 				state->ctrl_l_hold = 1;
@@ -596,46 +602,12 @@ static void handle_libinput_event(struct wsk_state *state,
 			}
 		} else {
 			struct wsk_keypress **link = &state->keys;
+			//get the end of the output keylink
 			while (*link) {
 				link = &(*link)->next;
 			}
 
-			if(state->ctrl_l_hold) {
-				struct wsk_keypress *temp_keypress = calloc(1, sizeof(struct wsk_keypress));
-				strcpy(temp_keypress->name,"Control_L");
-				*link = temp_keypress;
-				link = &(*link)->next;
-			} 
-			if(state->ctrl_r_hold) {
-				struct wsk_keypress *temp_keypress = calloc(1, sizeof(struct wsk_keypress));
-				strcpy(temp_keypress->name,"Control_R");
-				*link = temp_keypress;
-				link = &(*link)->next;
-			} 
-			if(state->alt_l_hold) {
-				struct wsk_keypress *temp_keypress = calloc(1, sizeof(struct wsk_keypress));
-				strcpy(temp_keypress->name,"Alt_L");
-				*link = temp_keypress;
-				link = &(*link)->next;
-			}
-			if(state->alt_r_hold) {
-				struct wsk_keypress *temp_keypress = calloc(1, sizeof(struct wsk_keypress));
-				strcpy(temp_keypress->name,"Alt_R");
-				*link = temp_keypress;
-				link = &(*link)->next;
-			}
-			if(state->super_l_hold) {
-				struct wsk_keypress *temp_keypress = calloc(1, sizeof(struct wsk_keypress));
-				strcpy(temp_keypress->name,"Super_L");
-				*link = temp_keypress;
-				link = &(*link)->next;
-			}
-			if(state->supre_r_hold) {
-				struct wsk_keypress *temp_keypress = calloc(1, sizeof(struct wsk_keypress));
-				strcpy(temp_keypress->name,"Super_R");
-				*link = temp_keypress;
-				link = &(*link)->next;
-			}
+			// if 'ctrl shift alt super' still press,make a key node to output end
 			if(state->shift_l_hold) {
 				struct wsk_keypress *temp_keypress = calloc(1, sizeof(struct wsk_keypress));
 				strcpy(temp_keypress->name,"Shift_L");
@@ -648,7 +620,44 @@ static void handle_libinput_event(struct wsk_state *state,
 				*link = temp_keypress;
 				link = &(*link)->next;
 			}
+			if(state->ctrl_l_hold) {
+				struct wsk_keypress *temp_keypress = calloc(1, sizeof(struct wsk_keypress));
+				strcpy(temp_keypress->name,"Control_L");
+				*link = temp_keypress;
+				link = &(*link)->next;
+			} 
+			if(state->ctrl_r_hold) {
+				struct wsk_keypress *temp_keypress = calloc(1, sizeof(struct wsk_keypress));
+				strcpy(temp_keypress->name,"Control_R");
+				*link = temp_keypress;
+				link = &(*link)->next;
+			} 
+			if(state->super_l_hold) {
+				struct wsk_keypress *temp_keypress = calloc(1, sizeof(struct wsk_keypress));
+				strcpy(temp_keypress->name,"Super_L");
+				*link = temp_keypress;
+				link = &(*link)->next;
+			}
+			if(state->supre_r_hold) {
+				struct wsk_keypress *temp_keypress = calloc(1, sizeof(struct wsk_keypress));
+				strcpy(temp_keypress->name,"Super_R");
+				*link = temp_keypress;
+				link = &(*link)->next;
+			}
+			if(state->alt_l_hold) {
+				struct wsk_keypress *temp_keypress = calloc(1, sizeof(struct wsk_keypress));
+				strcpy(temp_keypress->name,"Alt_L");
+				*link = temp_keypress;
+				link = &(*link)->next;
+			}
+			if(state->alt_r_hold) {
+				struct wsk_keypress *temp_keypress = calloc(1, sizeof(struct wsk_keypress));
+				strcpy(temp_keypress->name,"Alt_R");
+				*link = temp_keypress;
+				link = &(*link)->next;
+			}
 
+			//add other key to end of output keylink
 			*link = keypress;
 		}
 		break;
@@ -722,7 +731,7 @@ int main(int argc, char *argv[]) {
 	while ((c = getopt(argc, argv, "hb:f:s:F:t:a:m:o:l:")) != -1) {
 		switch (c) {
 		case 'l':
-			state.lenmax = (int)*optarg;
+			state.lenmax = atoi(optarg);
 			break;
 		case 'b':
 			state.background = parse_color(optarg);
