@@ -78,6 +78,8 @@ struct wsk_state {
 	int supre_r_hold;
 	int shift_l_hold;
 	int shift_r_hold;
+
+	int always_show_shift;
 };
 
 void logtofile(const char *fmt, ...) {
@@ -605,13 +607,13 @@ static void handle_libinput_event(struct wsk_state *state,
 			}
 
 			// if 'ctrl shift alt super' still press,make a key node to output end
-			if(state->shift_l_hold) {
+			if((state->shift_l_hold && !(keypress->utf8)[0]) || state->always_show_shift) {
 				struct wsk_keypress *temp_keypress = calloc(1, sizeof(struct wsk_keypress));
 				strcpy(temp_keypress->name,"Shift_L");
 				*link = temp_keypress;
 				link = &(*link)->next;
 			}
-			if(state->shift_r_hold) {
+			if((state->shift_r_hold && !(keypress->utf8)[0]) || state->always_show_shift) {
 				struct wsk_keypress *temp_keypress = calloc(1, sizeof(struct wsk_keypress));
 				strcpy(temp_keypress->name,"Shift_R");
 				*link = temp_keypress;
@@ -733,10 +735,14 @@ int main(int argc, char *argv[]) {
 	state.supre_r_hold = 0;
 	state.shift_l_hold = 0;
 	state.shift_r_hold = 0;
+	state.always_show_shift = 0;
 
 	int c;
-	while ((c = getopt(argc, argv, "hb:f:s:F:t:a:m:o:l:")) != -1) {
+	while ((c = getopt(argc, argv, "hb:f:s:F:t:a:m:o:l:A:")) != -1) {
 		switch (c) {
+		case 'A':
+			state.always_show_shift = atoi(optarg);
+			break;
 		case 'l':
 			state.length_limit = atoi(optarg);
 			break;
@@ -775,7 +781,7 @@ int main(int argc, char *argv[]) {
 		default:
 			fprintf(stderr, "usage: wshowkeys [-b|-f|-s #RRGGBB[AA]] [-F font] "
 					"[-t timeout]\n\t[-a top|left|right|bottom] [-m margin] "
-					"[-o output] [-l numOfLengthLimit]");
+					"[-o output] [-l numOfLengthLimit] [-A 0|1]");
 			return 1;
 		}
 	}
