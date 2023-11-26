@@ -118,9 +118,6 @@ static cairo_subpixel_order_t to_cairo_subpixel_order(
 	return CAIRO_SUBPIXEL_ORDER_DEFAULT;
 }
 
-//Some characters take up more than one byte but only one place in space
-static const char *longstr = "󱁐 \\ | ";
-
 //change default keyname to custom name
 static void custome_key_name(char *name){
     if (strcmp(name, "Return") == 0) {
@@ -903,11 +900,7 @@ int main(int argc, char *argv[]) {
 			while (key) {
 				strcpy(temp_name,key->name);
 				custome_key_name(temp_name);
-				if(strstr(longstr,temp_name)) {
-					all_key_len = all_key_len + 2;
-				} else {
-					all_key_len = all_key_len + strlen(temp_name);
-				}
+				all_key_len = all_key_len + strlen(temp_name);
 				struct wsk_keypress *next = key->next;
 				key = next;
 			}
