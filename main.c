@@ -45,7 +45,7 @@ struct wsk_state {
 	uint32_t foreground, background, specialfg;
 	const char *font;
 	int timeout;
-	int lenmax;
+	int length_limit;
 
 	struct wl_display *display;
 	struct wl_registry *registry;
@@ -722,9 +722,9 @@ int main(int argc, char *argv[]) {
 	state.background = 0x000000CC;
 	state.specialfg = 0xAAAAAAFF;
 	state.foreground = 0xFFFFFFFF;
-	state.font = "monospace 24";
+	state.font = "Sans Bold 40";
 	state.timeout = 200;
-	state.lenmax = 100;
+	state.length_limit = 100;
 	state.ctrl_l_hold = 0;
 	state.ctrl_r_hold = 0;
 	state.alt_l_hold = 0;
@@ -738,7 +738,7 @@ int main(int argc, char *argv[]) {
 	while ((c = getopt(argc, argv, "hb:f:s:F:t:a:m:o:l:")) != -1) {
 		switch (c) {
 		case 'l':
-			state.lenmax = atoi(optarg);
+			state.length_limit = atoi(optarg);
 			break;
 		case 'b':
 			state.background = parse_color(optarg);
@@ -775,7 +775,7 @@ int main(int argc, char *argv[]) {
 		default:
 			fprintf(stderr, "usage: wshowkeys [-b|-f|-s #RRGGBB[AA]] [-F font] "
 					"[-t timeout]\n\t[-a top|left|right|bottom] [-m margin] "
-					"[-o output]\n[-l lenmax]");
+					"[-o output] [-l numOfLengthLimit]");
 			return 1;
 		}
 	}
@@ -905,7 +905,7 @@ int main(int argc, char *argv[]) {
 				key = next;
 			}
 			free(temp_name);
-			if(all_key_len > state.lenmax){ //reach len max limit
+			if(all_key_len > state.length_limit){ //reach len max limit
 				key = state.keys;
 				struct wsk_keypress *next = key->next;
 				free(key); //del the begin key in keylink
