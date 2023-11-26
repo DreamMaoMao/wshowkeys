@@ -134,6 +134,10 @@ static void custome_key_name(char *name){
         strcpy(name, " Alt+");
     } else if (strcmp(name, "Alt_R") == 0) {
         strcpy(name, " Alt+");
+    } else if (strcmp(name, "Meta_L") == 0) {
+        strcpy(name, " Alt+");
+    } else if (strcmp(name, "Meta_R") == 0) {
+        strcpy(name, " Alt+");
     } else if (strcmp(name, "Shift_L") == 0) {
         strcpy(name, " Shift+");
     } else if (strcmp(name, "Shift_R") == 0) {
@@ -551,14 +555,14 @@ static void handle_libinput_event(struct wsk_state *state,
 
 	switch (key_state) {
 	case LIBINPUT_KEY_STATE_RELEASED:
-		if(strlen(keypress->name) > 2 && strstr("Control_LControl_RAlt_LAlt_RSuper_LSuper_RShift_LShift_R",keypress->name)){
+		if(strlen(keypress->name) > 2 && strstr("Control_LControl_RAlt_LAlt_RSuper_LSuper_RShift_LShift_RMeta_LMeta_R",keypress->name)){
 			if(strcmp(keypress->name,"Control_L")==0){
 				state->ctrl_l_hold = 0;
 			} else if(strcmp(keypress->name,"Control_R")==0){
 				state->ctrl_r_hold = 0;
-			} else if(strcmp(keypress->name,"Alt_L")==0){
+			} else if(strcmp(keypress->name,"Alt_L")==0 || strcmp(keypress->name,"Meta_L")==0){
 				state->alt_l_hold = 0;
-			} else if(strcmp(keypress->name,"Alt_R")==0){
+			} else if(strcmp(keypress->name,"Alt_R")==0 || strcmp(keypress->name,"Meta_R")==0){
 				state->alt_r_hold = 0;
 			} else if(strcmp(keypress->name,"Super_L")==0){
 				state->super_l_hold = 0;
@@ -572,14 +576,14 @@ static void handle_libinput_event(struct wsk_state *state,
 		} 
 		break;
 	case LIBINPUT_KEY_STATE_PRESSED:
-		if(strlen(keypress->name) > 2 && strstr("Control_LControl_RAlt_LAlt_RSuper_LSuper_RShift_LShift_R",keypress->name)){
+		if(strlen(keypress->name) > 2 && strstr("Control_LControl_RAlt_LAlt_RSuper_LSuper_RShift_LShift_RMeta_LMeta_R",keypress->name)){
 			if(strcmp(keypress->name,"Control_L")==0){
 				state->ctrl_l_hold = 1;
 			} else if(strcmp(keypress->name,"Control_R")==0){
 				state->ctrl_r_hold = 1;
-			} else if(strcmp(keypress->name,"Alt_L")==0){
+			} else if(strcmp(keypress->name,"Alt_L")==0 || strcmp(keypress->name,"Meta_L")==0){
 				state->alt_l_hold = 1;
-			} else if(strcmp(keypress->name,"Alt_R")==0){
+			} else if(strcmp(keypress->name,"Alt_R")==0 || strcmp(keypress->name,"Meta_R")==0){
 				state->alt_r_hold = 1;
 			} else if(strcmp(keypress->name,"Super_L")==0){
 				state->super_l_hold = 1;
