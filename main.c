@@ -119,7 +119,7 @@ static cairo_subpixel_order_t to_cairo_subpixel_order(
 }
 
 //Some characters take up more than one byte but only one place in space
-static const char *longstr = "󱁐 ⌫ \\ | ";
+static const char *longstr = "󱁐 \\ | ";
 
 //change default keyname to custom name
 static void custome_key_name(char *name){
