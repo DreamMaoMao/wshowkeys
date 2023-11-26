@@ -178,6 +178,10 @@ static void custome_key_name(char *name){
         strcpy(name, "8");
     } else if (strcmp(name, "KP_Prior") == 0) {
         strcpy(name, "9");
+    } else if (strcmp(name, "KP_Delete") == 0) {
+        strcpy(name, ".");
+    } else if (strcmp(name, "KP_Enter") == 0) {
+        strcpy(name, "⏎");
     }
 
 }
