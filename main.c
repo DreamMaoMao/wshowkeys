@@ -66,6 +66,14 @@ struct wsk_state {
 	struct xkb_keymap *xkb_keymap;
 
 	struct wsk_keypress *keys;
+	int ctrl_l_hold;
+	int ctrl_r_hold;
+	int alt_l_hold;
+	int alt_r_hold;
+	int super_l_hold;
+	int supre_r_hold;
+	int shift_l_hold;
+	int shift_r_hold;
 	struct timespec last_key;
 
 	bool run;
@@ -109,7 +117,7 @@ static cairo_subpixel_order_t to_cairo_subpixel_order(
 	return CAIRO_SUBPIXEL_ORDER_DEFAULT;
 }
 
-static const char *longstr = "󱁐 ⌫ ";
+static const char *longstr = "󱁐 ⌫ \\ | ";
 
 static void custome_key_name(char *name){
     if (strcmp(name, "Return") == 0) {
@@ -137,7 +145,7 @@ static void custome_key_name(char *name){
     } else if (strcmp(name, "Tab") == 0) {
         strcpy(name, "Tab ");
     } else if (strcmp(name, "backslash") == 0) {
-        strcpy(name, " Backslash ");
+        strcpy(name, "\\");
     } else if (strcmp(name, "BackSpace") == 0) {
         strcpy(name, "⌫ ");
     } else if (strcmp(name, "Caps_Lock") == 0) {
@@ -506,29 +514,115 @@ static void handle_libinput_event(struct wsk_state *state,
 	xkb_keysym_t keysym = xkb_state_key_get_one_sym(state->xkb_state, keycode);
 
 	struct wsk_keypress *keypress;
+	keypress = calloc(1, sizeof(struct wsk_keypress));
+	assert(keypress);
+	keypress->sym = keysym;
+	xkb_keysym_get_name(keypress->sym, keypress->name,
+			sizeof(keypress->name));
+	if (xkb_state_key_get_utf8(state->xkb_state, keycode,
+			keypress->utf8, sizeof(keypress->utf8)) <= 0 ||
+			keypress->utf8[0] <= ' ') {
+		keypress->utf8[0] = '\0';
+	}
+
 	switch (key_state) {
 	case LIBINPUT_KEY_STATE_RELEASED:
-		/* Who cares */
+		if(strlen(keypress->name) > 2 && strstr("Control_LControl_RAlt_LAlt_RSuper_LSuper_RShift_LShift_R",keypress->name)){
+			if(strcmp(keypress->name,"Control_L")==0){
+				state->ctrl_l_hold = 0;
+			} else if(strcmp(keypress->name,"Control_R")==0){
+				state->ctrl_r_hold = 0;
+			} else if(strcmp(keypress->name,"Alt_L")==0){
+				state->alt_l_hold = 0;
+			} else if(strcmp(keypress->name,"Alt_R")==0){
+				state->alt_r_hold = 0;
+			} else if(strcmp(keypress->name,"Super_L")==0){
+				state->super_l_hold = 0;
+			} else if(strcmp(keypress->name,"Super_R")==0){
+				state->supre_r_hold = 0;
+			} else if(strcmp(keypress->name,"Shift_L")==0){
+				state->shift_l_hold = 0;
+			} else if(strcmp(keypress->name,"Shift_R")==0){
+				state->shift_r_hold = 0;
+			}
+		} 
 		break;
 	case LIBINPUT_KEY_STATE_PRESSED:
-		keypress = calloc(1, sizeof(struct wsk_keypress));
-		assert(keypress);
-		keypress->sym = keysym;
-		xkb_keysym_get_name(keypress->sym, keypress->name,
-				sizeof(keypress->name));
-		// logtofile(keypress->name);
-		// logtofile("󱁐 󰌑");
-		if (xkb_state_key_get_utf8(state->xkb_state, keycode,
-				keypress->utf8, sizeof(keypress->utf8)) <= 0 ||
-				keypress->utf8[0] <= ' ') {
-			keypress->utf8[0] = '\0';
-		}
+		if(strlen(keypress->name) > 2 && strstr("Control_LControl_RAlt_LAlt_RSuper_LSuper_RShift_LShift_R",keypress->name)){
+			if(strcmp(keypress->name,"Control_L")==0){
+				state->ctrl_l_hold = 1;
+			} else if(strcmp(keypress->name,"Control_R")==0){
+				state->ctrl_r_hold = 1;
+			} else if(strcmp(keypress->name,"Alt_L")==0){
+				state->alt_l_hold = 1;
+			} else if(strcmp(keypress->name,"Alt_R")==0){
+				state->alt_r_hold = 1;
+			} else if(strcmp(keypress->name,"Super_L")==0){
+				state->super_l_hold = 1;
+			} else if(strcmp(keypress->name,"Super_R")==0){
+				state->supre_r_hold = 1;
+			} else if(strcmp(keypress->name,"Shift_L")==0){
+				state->shift_l_hold = 1;
+			} else if(strcmp(keypress->name,"Shift_R")==0){
+				state->shift_r_hold = 1;
+			}
+		} else {
+			struct wsk_keypress **link = &state->keys;
+			while (*link) {
+				link = &(*link)->next;
+			}
 
-		struct wsk_keypress **link = &state->keys;
-		while (*link) {
-			link = &(*link)->next;
+			if(state->ctrl_l_hold) {
+				struct wsk_keypress *temp_keypress = calloc(1, sizeof(struct wsk_keypress));
+				strcpy(temp_keypress->name,"Control_L");
+				*link = temp_keypress;
+				link = &(*link)->next;
+			} 
+			if(state->ctrl_r_hold) {
+				struct wsk_keypress *temp_keypress = calloc(1, sizeof(struct wsk_keypress));
+				strcpy(temp_keypress->name,"Control_R");
+				*link = temp_keypress;
+				link = &(*link)->next;
+			} 
+			if(state->alt_l_hold) {
+				struct wsk_keypress *temp_keypress = calloc(1, sizeof(struct wsk_keypress));
+				strcpy(temp_keypress->name,"Alt_L");
+				*link = temp_keypress;
+				link = &(*link)->next;
+			}
+			if(state->alt_r_hold) {
+				struct wsk_keypress *temp_keypress = calloc(1, sizeof(struct wsk_keypress));
+				strcpy(temp_keypress->name,"Alt_R");
+				*link = temp_keypress;
+				link = &(*link)->next;
+			}
+			if(state->super_l_hold) {
+				struct wsk_keypress *temp_keypress = calloc(1, sizeof(struct wsk_keypress));
+				strcpy(temp_keypress->name,"Super_L");
+				*link = temp_keypress;
+				link = &(*link)->next;
+			}
+			if(state->supre_r_hold) {
+				struct wsk_keypress *temp_keypress = calloc(1, sizeof(struct wsk_keypress));
+				strcpy(temp_keypress->name,"Super_R");
+				*link = temp_keypress;
+				link = &(*link)->next;
+			}
+			if(state->shift_l_hold) {
+				struct wsk_keypress *temp_keypress = calloc(1, sizeof(struct wsk_keypress));
+				strcpy(temp_keypress->name,"Shift_L");
+				*link = temp_keypress;
+				link = &(*link)->next;
+			}
+			if(state->shift_r_hold) {
+				struct wsk_keypress *temp_keypress = calloc(1, sizeof(struct wsk_keypress));
+				strcpy(temp_keypress->name,"Shift_R");
+				*link = temp_keypress;
+				link = &(*link)->next;
+			}
+
+			*link = keypress;
 		}
-		*link = keypress;
 		break;
 	}
 
@@ -587,6 +681,14 @@ int main(int argc, char *argv[]) {
 	state.font = "monospace 24";
 	state.timeout = 200;
 	state.lenmax = 100;
+	state.ctrl_l_hold = 0;
+	state.ctrl_r_hold = 0;
+	state.alt_l_hold = 0;
+	state.alt_r_hold = 0;
+	state.super_l_hold = 0;
+	state.supre_r_hold = 0;
+	state.shift_l_hold = 0;
+	state.shift_r_hold = 0;
 
 	int c;
 	while ((c = getopt(argc, argv, "hb:f:s:F:t:a:m:o:l:")) != -1) {
