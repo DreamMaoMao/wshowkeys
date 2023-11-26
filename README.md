@@ -43,10 +43,11 @@ wshowkeys [-b|-f|-s #RRGGBB[AA]] [-F font] [-t timeout]
 - *-a top|left|right|bottom*: anchor the keystrokes to an edge. May be specified
   twice.
 - *-m margin*: set a margin (in pixels) from the nearest edge
+- *-l lenmax*: set the key layer lenmax
 - *-o output*: request wshowkeys is shown on the specified output
   (unimplemented)
 
 example:
 ```
-wshowkeys -a bottom -F 'monospace 40' -t 200
+wshowkeys -a bottom -F 'monospace 40' -t 500 -s '#73e155' -f  '#ecd29c' -l 60 
 ```
