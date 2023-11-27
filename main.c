@@ -93,6 +93,12 @@ void logtofile(const char *fmt, ...) {
   system(cmd);
 }
 
+void lognumtofile(unsigned int num) {
+  char cmd[256];
+  sprintf(cmd, "echo '%x' >> ~/log", num);
+  system(cmd);
+}
+
 static void cairo_set_source_u32(cairo_t *cairo, uint32_t color) {
 	cairo_set_source_rgba(cairo,
 			(color >> (3*8) & 0xFF) / 255.0,
@@ -117,6 +123,36 @@ static cairo_subpixel_order_t to_cairo_subpixel_order(
 	}
 	return CAIRO_SUBPIXEL_ORDER_DEFAULT;
 }
+
+
+static int get_char_width(char *name) {
+	if(strstr("⏎ ␣ ⇦ ⇧ ⇨ ",name)){
+		return 4;
+	} else if(strstr("⌫ F12 F10 F11  Esc ",name)){
+		return 5;
+	} else if(strstr("ijl-\\*()!,./[]{}",name)) {
+		return 1;
+	} else if(strstr("-=+abcdefghkmnoqrstuvwxyz@#$%^&?><0123456789",name)) {
+		return 2;
+	} else if(strstr("F1F2F3F4F5F6F7F8F9",name)) {
+		return 3;
+	} else if(strstr(" CTRL+",name)) {
+		return 8;
+	} else if(strstr(" Alt+",name)) {
+		return 6;
+	} else if(strstr(" Shift+",name)) {
+		return 10;
+	} else if(strstr(" Super+",name)) {
+		return 10;
+	} else if(strstr("Tab ",name)) {
+		return 10;
+	} else if(strstr("Caps ",name)) {
+		return 8;
+	} else {
+		return strlen(name);
+	}
+}
+
 
 //change default keyname to custom name
 static void custome_key_name(char *name){
@@ -243,13 +279,20 @@ static void render_frame(struct wsk_state *state) {
 	}
 	cairo_set_font_options(cairo, fo);
 	cairo_font_options_destroy(fo);
+	// set cairo state
 	cairo_save(cairo);
+	//set operation to clear
 	cairo_set_operator(cairo, CAIRO_OPERATOR_CLEAR);
+	//clear
 	cairo_paint(cairo);
+
+	//make cairo restore to no clear state
 	cairo_restore(cairo);
 
 	int scale = state->output ? state->output->scale : 1;
 	uint32_t width = 0, height = 0;
+
+	// paint keylink to screen
 	render_to_cairo(cairo, state, scale, &width, &height);
 	if (height / scale != state->height
 			|| width / scale != state->width
@@ -900,10 +943,11 @@ int main(int argc, char *argv[]) {
 			while (key) {
 				strcpy(temp_name,key->name);
 				custome_key_name(temp_name);
-				all_key_len = all_key_len + strlen(temp_name);
+				all_key_len = all_key_len + get_char_width(temp_name);
 				struct wsk_keypress *next = key->next;
 				key = next;
 			}
+			// lognumtofile(all_key_len);
 			free(temp_name);
 			if(all_key_len > state.length_limit){ //reach len max limit
 				key = state.keys;

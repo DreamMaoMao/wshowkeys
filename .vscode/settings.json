@@ -1,5 +1,8 @@
 {
     "files.associations": {
-        "cstring": "c"
+        "cstring": "c",
+        "chrono": "c",
+        "typeindex": "c",
+        "typeinfo": "c"
     }
 }
