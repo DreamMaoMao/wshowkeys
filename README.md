@@ -22,7 +22,7 @@ Dependencies:
 $ meson build
 $ ninja -C build
 # ninja -C build install
-# chmod a+s /usr/bin/wshowkeys
+# sudo chmod a+s /usr/bin/wshowkeys
 ```
 
 wshowkeys must be configured as setuid during installation. It requires root
