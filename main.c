@@ -130,11 +130,11 @@ static int get_char_width(char *name) {
 		return 4;
 	} else if(strstr("⌫ F12 F10 F11  Esc ",name)){
 		return 5;
-	} else if(strstr("ijl-\\*()!,./[]{}",name)) {
+	} else if(strstr("ijl-\\*()!,./[]{}012",name)) {
 		return 1;
-	} else if(strstr("-=+abcdefghkmnoqrstuvwxyz@#$%^&?><0123456789",name)) {
+	} else if(strstr("-=+abcdefghkmnoqrstuvwxyz@#$%^&?><",name)) {
 		return 2;
-	} else if(strstr("F1F2F3F4F5F6F7F8F9",name)) {
+	} else if(strstr("F1F2F3F4F5F6F7F8F93456789",name)) {
 		return 3;
 	} else if(strstr(" CTRL+",name)) {
 		return 8;
