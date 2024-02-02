@@ -78,6 +78,11 @@ struct wsk_state {
 	int supre_r_hold;
 	int shift_l_hold;
 	int shift_r_hold;
+
+	char current_combination_key[128];
+	char prev_combination_keye[128];
+
+	int combination_keye_repetition;
 };
 
 void logtofile(const char *fmt, ...) {
@@ -561,6 +566,81 @@ static const struct wl_registry_listener registry_listener = {
 	.global_remove = registry_global_remove,
 };
 
+static int caculat_del_charnum_of_int(int num) {
+  int count = 0; 
+
+	if (num == 1 ) {
+		return 0;
+	}
+
+  while (num != 0) { 
+    num /= 10; 
+    ++count; 
+  }
+  return count + 2;
+}
+
+static int caculat_add_charnum_of_int(int num) {
+  int count = 0; 
+
+  while (num != 0) { 
+    num /= 10; 
+    ++count; 
+  }
+  return count + 1;
+}
+
+
+static void del_last_key(struct wsk_state *state,int n) {
+	struct wsk_keypress **temp_keypress;
+	while (n > 0)
+	{	
+		struct wsk_keypress **link = &state->keys;
+		while (*link) {
+			temp_keypress = &(*link)->next;
+			if((*temp_keypress) == NULL) {
+				free(*link);
+				*link = NULL;
+			} else {
+				link = temp_keypress;
+			}
+		}
+		n--;
+	}			
+}
+
+static void attach_to_last(struct wsk_state *state,struct wsk_keypress *key) {
+	struct wsk_keypress **attach = &state->keys;
+	//get the end of the output keylink
+	while (*attach) {
+		attach = &(*attach)->next;
+	}
+	*attach =  key;
+}
+
+static void attach_repeat_flag(struct wsk_state *state,int num,int num_len) {
+	struct wsk_keypress *repeat_flag = calloc(1, sizeof(struct wsk_keypress));
+	strcpy(repeat_flag->name,"ₓ");
+	attach_to_last(state,repeat_flag);
+
+	char *repeat_num_char = calloc(num_len+1, sizeof(char));
+	sprintf(repeat_num_char, "%d", num);	
+
+	for (int i = 0; i < num_len; i++) {
+	//   printf("%c\n", a[i]); // 打印每个字符
+		struct wsk_keypress *repeat_num = calloc(1, sizeof(struct wsk_keypress));
+		char *temp_char = calloc(2,sizeof(char));
+		temp_char[0] = repeat_num_char[i];
+		temp_char[1] = '\0';
+		strcpy(repeat_num->name,temp_char);
+		attach_to_last(state,repeat_num);
+		free(temp_char);
+	}
+
+	free(repeat_num_char);
+
+}
+
 //listen key keydown and record to keylink
 static void handle_libinput_event(struct wsk_state *state,
 		struct libinput_event *event) {
@@ -596,6 +676,10 @@ static void handle_libinput_event(struct wsk_state *state,
 			keypress->utf8[0] <= ' ') {
 		keypress->utf8[0] = '\0';
 	}
+
+	// clear current_combination_key
+	memset(state->current_combination_key, 0, sizeof(state->current_combination_key));
+	int special_key_num = 0;
 
 	switch (key_state) {
 	case LIBINPUT_KEY_STATE_RELEASED:
@@ -651,54 +735,91 @@ static void handle_libinput_event(struct wsk_state *state,
 			if(state->shift_l_hold) {
 				struct wsk_keypress *temp_keypress = calloc(1, sizeof(struct wsk_keypress));
 				strcpy(temp_keypress->name,"Shift_L");
+				strcat(state->current_combination_key, "Shift_L"); 
+				special_key_num ++;
 				*link = temp_keypress;
 				link = &(*link)->next;
 			}
 			if(state->shift_r_hold) {
 				struct wsk_keypress *temp_keypress = calloc(1, sizeof(struct wsk_keypress));
 				strcpy(temp_keypress->name,"Shift_R");
+				strcat(state->current_combination_key, "Shift_R"); 
+				special_key_num ++;
 				*link = temp_keypress;
 				link = &(*link)->next;
 			}
 			if(state->ctrl_l_hold) {
 				struct wsk_keypress *temp_keypress = calloc(1, sizeof(struct wsk_keypress));
 				strcpy(temp_keypress->name,"Control_L");
+				strcat(state->current_combination_key, "Control_L"); 
+				special_key_num ++;
 				*link = temp_keypress;
 				link = &(*link)->next;
 			} 
 			if(state->ctrl_r_hold) {
 				struct wsk_keypress *temp_keypress = calloc(1, sizeof(struct wsk_keypress));
 				strcpy(temp_keypress->name,"Control_R");
+				strcat(state->current_combination_key, "Control_R"); 
+				special_key_num ++;
 				*link = temp_keypress;
 				link = &(*link)->next;
 			} 
 			if(state->super_l_hold) {
 				struct wsk_keypress *temp_keypress = calloc(1, sizeof(struct wsk_keypress));
 				strcpy(temp_keypress->name,"Super_L");
+				strcat(state->current_combination_key, "Super_L"); 
+				special_key_num ++;
 				*link = temp_keypress;
 				link = &(*link)->next;
 			}
 			if(state->supre_r_hold) {
 				struct wsk_keypress *temp_keypress = calloc(1, sizeof(struct wsk_keypress));
 				strcpy(temp_keypress->name,"Super_R");
+				strcat(state->current_combination_key, "Super_R"); 
+				special_key_num ++;
 				*link = temp_keypress;
 				link = &(*link)->next;
 			}
 			if(state->alt_l_hold) {
 				struct wsk_keypress *temp_keypress = calloc(1, sizeof(struct wsk_keypress));
 				strcpy(temp_keypress->name,"Alt_L");
+				strcat(state->current_combination_key, "Alt_L"); 
+				special_key_num ++;
 				*link = temp_keypress;
 				link = &(*link)->next;
 			}
 			if(state->alt_r_hold) {
 				struct wsk_keypress *temp_keypress = calloc(1, sizeof(struct wsk_keypress));
 				strcpy(temp_keypress->name,"Alt_R");
+				strcat(state->current_combination_key, "Alt_R"); 
+				special_key_num ++;
 				*link = temp_keypress;
 				link = &(*link)->next;
 			}
 
 			//add other key to end of output keylink
 			*link = keypress;
+			strcat(state->current_combination_key, keypress->name);
+			special_key_num ++;
+
+			// detect repeat key
+			if (strcmp(state->prev_combination_keye,"") != 0 && strcmp(state->prev_combination_keye,state->current_combination_key) == 0) {
+				
+				int del_charnum = caculat_del_charnum_of_int(state->combination_keye_repetition);
+				if (state->combination_keye_repetition > 2)
+					del_last_key(state,special_key_num + del_charnum);
+
+				state->combination_keye_repetition ++;
+
+				if (state->combination_keye_repetition > 2) {
+					int add_charnum = caculat_add_charnum_of_int(state->combination_keye_repetition);
+					attach_repeat_flag(state,state->combination_keye_repetition,add_charnum);
+				}
+			} else {
+				memset(state->prev_combination_keye, 0, sizeof(state->prev_combination_keye));
+				strcat(state->prev_combination_keye, state->current_combination_key);
+				state->combination_keye_repetition = 1; 
+			}
 		}
 		break;
 	}
@@ -746,6 +867,9 @@ void clear_full_keylink(struct wsk_keypress *key,struct wsk_state *state) {
 		free(key);
 		key = next;
 	}
+	state->combination_keye_repetition = 1;
+	memset(state->current_combination_key, 0, sizeof(state->current_combination_key));
+	memset(state->prev_combination_keye, 0, sizeof(state->prev_combination_keye));
 	state->keys = NULL;
 	set_dirty(state);
 }
@@ -776,6 +900,7 @@ int main(int argc, char *argv[]) {
 	state.supre_r_hold = 0;
 	state.shift_l_hold = 0;
 	state.shift_r_hold = 0;
+	state.combination_keye_repetition = 1;
 
 	int c;
 	while ((c = getopt(argc, argv, "hb:f:s:F:t:a:m:o:l:")) != -1) {
@@ -947,7 +1072,6 @@ int main(int argc, char *argv[]) {
 				struct wsk_keypress *next = key->next;
 				key = next;
 			}
-			// lognumtofile(all_key_len);
 			free(temp_name);
 			if(all_key_len > state.length_limit){ //reach len max limit
 				key = state.keys;
