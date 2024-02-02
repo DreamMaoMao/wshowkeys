@@ -618,6 +618,41 @@ static void attach_to_last(struct wsk_state *state,struct wsk_keypress *key) {
 	*attach =  key;
 }
 
+static void change_numchar_to_special(char *target,char numchar) {
+	switch(numchar){
+    case '0':
+		strcpy(target,"₀");
+       	break;
+    case '1':
+		strcpy(target,"₁");
+       	break; 
+    case '2':
+		strcpy(target,"₂");
+       	break; 
+    case '3':
+		strcpy(target,"₃");
+       	break; 
+    case '4':
+		strcpy(target,"₄");
+       break; 
+    case '5':
+		strcpy(target,"₅");
+       	break; 
+    case '6':
+		strcpy(target,"₆");
+       	break; 
+    case '7':
+		strcpy(target,"₇");
+       	break; 
+    case '8':
+		strcpy(target,"₈");
+       	break; 
+    case '9':
+		strcpy(target,"₉");
+       	break; 
+	}
+}
+
 static void attach_repeat_flag(struct wsk_state *state,int num,int num_len) {
 	struct wsk_keypress *repeat_flag = calloc(1, sizeof(struct wsk_keypress));
 	strcpy(repeat_flag->name,"ₓ");
@@ -629,12 +664,8 @@ static void attach_repeat_flag(struct wsk_state *state,int num,int num_len) {
 	for (int i = 0; i < num_len; i++) {
 	//   printf("%c\n", a[i]); // 打印每个字符
 		struct wsk_keypress *repeat_num = calloc(1, sizeof(struct wsk_keypress));
-		char *temp_char = calloc(2,sizeof(char));
-		temp_char[0] = repeat_num_char[i];
-		temp_char[1] = '\0';
-		strcpy(repeat_num->name,temp_char);
+		change_numchar_to_special(repeat_num->name,repeat_num_char[i]);
 		attach_to_last(state,repeat_num);
-		free(temp_char);
 	}
 
 	free(repeat_num_char);
