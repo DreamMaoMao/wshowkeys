@@ -6,7 +6,7 @@ Displays keypresses on screen on supported Wayland compositors (requires
 
 
 
-https://github.com/DreamMaoMao/myshowkey/assets/30348075/1849c30a-9970-4d79-825d-3cfed05795a9
+https://github.com/DreamMaoMao/myshowkey/assets/30348075/944d9e92-ea6f-4017-9b50-11ba1a34ee32
 
 
 
