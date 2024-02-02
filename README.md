@@ -5,7 +5,10 @@ Displays keypresses on screen on supported Wayland compositors (requires
 
 
 
-https://github.com/DreamMaoMao/myshowkey/assets/30348075/32ed9622-827c-4119-b02c-99a06b6c89c3
+
+https://github.com/DreamMaoMao/myshowkey/assets/30348075/1849c30a-9970-4d79-825d-3cfed05795a9
+
+
 
 
 
