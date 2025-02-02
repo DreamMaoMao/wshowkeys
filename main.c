@@ -85,24 +85,24 @@ struct wsk_state {
 	int combination_keye_repetition;
 };
 
-void logtofile(const char *fmt, ...) {
-  char buf[256];
-  char cmd[256];
-  va_list ap;
-  va_start(ap, fmt);
-  vsprintf((char *)buf, fmt, ap);
-  va_end(ap);
-  unsigned int i = strlen((const char *)buf);
-
-  sprintf(cmd, "echo '%.*s' >> ~/log", i, buf);
-  system(cmd);
-}
-
-void lognumtofile(unsigned int num) {
-  char cmd[256];
-  sprintf(cmd, "echo '%x' >> ~/log", num);
-  system(cmd);
-}
+/* void logtofile(const char *fmt, ...) { */
+/*   char buf[256]; */
+/*   char cmd[256]; */
+/*   va_list ap; */
+/*   va_start(ap, fmt); */
+/*   vsprintf((char *)buf, fmt, ap); */
+/*   va_end(ap); */
+/*   unsigned int i = strlen((const char *)buf); */
+/*  */
+/*   sprintf(cmd, "echo '%.*s' >> ~/log", i, buf); */
+/*   system(cmd); */
+/* } */
+/*  */
+/* void lognumtofile(unsigned int num) { */
+/*   char cmd[256]; */
+/*   sprintf(cmd, "echo '%x' >> ~/log", num); */
+/*   system(cmd); */
+/* } */
 
 static void cairo_set_source_u32(cairo_t *cairo, uint32_t color) {
 	cairo_set_source_rgba(cairo,
