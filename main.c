@@ -141,7 +141,7 @@ static int get_char_width(char *name) {
 		return 2;
 	} else if(strstr("F1F2F3F4F5F6F7F8F93456789",name)) {
 		return 3;
-	} else if(strstr(" CTRL+",name)) {
+	} else if(strstr(" Ctrl+",name)) {
 		return 8;
 	} else if(strstr(" Alt+",name)) {
 		return 6;
@@ -168,9 +168,9 @@ static void custome_key_name(char *name){
     } else if (strcmp(name, "Escape") == 0) {
         strcpy(name, " Esc ");
     } else if (strcmp(name, "Control_L") == 0) {
-        strcpy(name, " CTRL+");
+        strcpy(name, " Ctrl+");
     } else if (strcmp(name, "Control_R") == 0) {
-        strcpy(name, " CTRL+");
+        strcpy(name, " Ctrl+");
     } else if (strcmp(name, "Alt_L") == 0) {
         strcpy(name, " Alt+");
     } else if (strcmp(name, "Alt_R") == 0) {
