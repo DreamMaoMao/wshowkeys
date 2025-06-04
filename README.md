@@ -16,6 +16,14 @@ Forked from https://git.sr.ht/~sircmpwn/wshowkeys as Drew has moved onto other t
 
 ## Installation
 
+### arch
+```bash
+yay -S wshowkeys-mao-git
+
+```
+
+### other
+
 Dependencies:
 
 - cairo
