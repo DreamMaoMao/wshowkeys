@@ -63,6 +63,6 @@ wshowkeys [-b|-f|-s #RRGGBB[AA]] [-F font] [-t timeout]
   (unimplemented)
 
 example:
-```
-wshowkeys -a bottom -F 'Sans Bold 40' -t 1000 -s '#73e155' -f  '#ecd29c' -l 60
+```bash
+wshowkeys -a bottom -F 'Sans Bold 30' -s '#B5B520ff' -f  '#ecd29cff' -b '#201B1488' -l 60
 ```
