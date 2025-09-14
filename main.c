@@ -1043,8 +1043,14 @@ int main(int argc, char *argv[]) {
 
 	state.layer_surface = zwlr_layer_shell_v1_get_layer_surface(
 			state.layer_shell, state.surface, NULL,
-			ZWLR_LAYER_SHELL_V1_LAYER_TOP, "showkeys");
+			ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY, "showkeys");
 	assert(state.layer_surface);
+
+	// 创建空的输入区域
+	struct wl_region *input_region = wl_compositor_create_region(state.compositor);
+	wl_surface_set_input_region(state.surface, input_region);
+	wl_region_destroy(input_region); // 销毁region，因为surface已经复制了一份
+
 	zwlr_layer_surface_v1_add_listener(
 			state.layer_surface, &layer_surface_listener, &state);
 	zwlr_layer_surface_v1_set_size(state.layer_surface, 1, 1);
