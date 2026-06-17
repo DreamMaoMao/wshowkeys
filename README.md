@@ -22,6 +22,29 @@ yay -S wshowkeys-mao-git
 
 ```
 
+### nix
+Add as a flake input:
+```nix
+{
+    inputs = {
+        # ...
+        wshowkeys = {
+            url = "github:DreamMaoMao/wshowkeys";
+            inputs.nixpkgs.follows = "nixpkgs"; # optional
+        };
+    }
+}
+```
+Then install using nixpkgs harness in system config:
+```nix
+programs.wshowkeys = {
+    enable = true;
+    package = inputs.wshowkeys.packages.${pkgs.stdenv.hostPlatform.system}.default;
+};
+```
+Without the harness, you will get a setuid error and the app won't run.
+
+
 ### other
 
 Dependencies:
