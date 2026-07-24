@@ -62,8 +62,10 @@ wshowkeys [-b|-f|-s #RRGGBB[AA]] [-F font] [-t timeout]
 - *-o output*: request wshowkeys is shown on the specified output
   (unimplemented)
 - *-M*: show modifier keys
+- *-U*: show mouse buttons
+- *-S*: show scroll direction
 
 example:
 ```bash
-wshowkeys -a bottom -F 'Sans Bold 30' -s '#B5B520ff' -f  '#ecd29cff' -b '#201B1488' -l 60
+wshowkeys -a bottom -F 'Sans Bold 30' -s '#B5B520ff' -f  '#ecd29cff' -b '#201B1488' -l 60 -t 500 -M -U -S
 ```
