@@ -54,10 +54,8 @@ subdir('protocols')
 executable(
 	'wshowkeys',
 	files(
-		'devmgr.c',
 		'main.c',
 		'pango.c',
-		'shm.c',
 	),
 	dependencies: [
 		cairo,

@@ -128,7 +128,7 @@ static void pango_printf(cairo_t *cairo, const char *font, int scale,
 	g_object_unref(layout);
 }
 
-/* ---- libinput 设备打开辅助（简单版，不需要额外的 devmgr） ---- */
+/* ---- libinput 设备打开辅助 ---- */
 #ifndef INPUTDEVPATH
 #define INPUTDEVPATH "/dev/input/"
 #endif
