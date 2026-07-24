@@ -86,7 +86,12 @@ struct wsk_state {
 	char current_combination_key[128];
 	char prev_combination_keye[128];
 	int combination_keye_repetition;
+
+	/* 超时后不立即清除，标记等待下次按键 */
+	bool pending_clear;
 };
+
+static void clear_full_keylink(struct wsk_state *state);
 
 /* ---------- 工具函数 ---------- */
 static void cairo_set_source_u32(cairo_t *cairo, uint32_t color) {
@@ -691,6 +696,11 @@ static void handle_libinput_event(struct wsk_state *state,
 	if (!state->xkb_state) return;
 	if (libinput_event_get_type(event) != LIBINPUT_EVENT_KEYBOARD_KEY) return;
 
+	/* 如果超时标记有效，先清除旧按键显示 */
+	if (state->pending_clear) {
+		clear_full_keylink(state);
+	}
+
 	struct libinput_event_keyboard *kbevent =
 		libinput_event_get_keyboard_event(event);
 	uint32_t keycode = libinput_event_keyboard_get_key(kbevent) + 8;
@@ -891,6 +901,7 @@ static void clear_full_keylink(struct wsk_state *state) {
 	memset(state->prev_combination_keye, 0,
 	       sizeof(state->prev_combination_keye));
 	state->keys = NULL;
+	state->pending_clear = false;
 	set_dirty(state);
 }
 
@@ -909,6 +920,7 @@ int main(int argc, char *argv[]) {
 	state.timeout = 200;
 	state.length_limit = 100;
 	state.combination_keye_repetition = 1;
+	state.pending_clear = false;
 
 	int c;
 	while ((c = getopt(argc, argv, "hb:f:s:F:t:a:m:o:l:")) != -1) {
@@ -1044,7 +1056,11 @@ int main(int argc, char *argv[]) {
 			long elapsed_ms = (now.tv_sec - state.last_key.tv_sec) * 1000 +
 			                  (now.tv_nsec - state.last_key.tv_nsec) / 1000000;
 			if (elapsed_ms >= state.timeout) {
-				clear_full_keylink(&state);
+				if (!state.pending_clear) {
+					state.pending_clear = true;
+					/* 不立即清除，只标记，等待下次按键 */
+				}
+				poll_timeout = -1; /* 无限等待事件 */
 			} else {
 				poll_timeout = state.timeout - (int)elapsed_ms;
 				if (poll_timeout < 1) poll_timeout = 1;
