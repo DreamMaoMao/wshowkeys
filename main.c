@@ -1120,6 +1120,13 @@ static void clear_full_keylink(struct wsk_state *state) {
 	set_dirty(state);
 }
 
+static void safe_strcat(char *dest, size_t dest_size, const char *src) {
+	size_t dest_len = strlen(dest);
+	if (dest_len < dest_size) {
+		snprintf(dest + dest_len, dest_size - dest_len, "%s", src);
+	}
+}
+
 // 处理来自 libinput 的事件：按键、鼠标按钮、滚轮
 static void handle_libinput_event(struct wsk_state *state,
 								  struct libinput_event *event) {
@@ -1260,10 +1267,12 @@ static void handle_libinput_event(struct wsk_state *state,
 			while (*link)
 				link = &(*link)->next;
 
+			// 安全追加修饰键字符串
 			if (state->shift_l_hold) {
 				struct wsk_keypress *k = calloc(1, sizeof(struct wsk_keypress));
 				strcpy(k->name, "Shift_L");
-				strcat(state->current_combination_key, "Shift_L");
+				safe_strcat(state->current_combination_key,
+							sizeof(state->current_combination_key), "Shift_L");
 				special_key_num++;
 				*link = k;
 				link = &(*link)->next;
@@ -1271,7 +1280,8 @@ static void handle_libinput_event(struct wsk_state *state,
 			if (state->shift_r_hold) {
 				struct wsk_keypress *k = calloc(1, sizeof(struct wsk_keypress));
 				strcpy(k->name, "Shift_R");
-				strcat(state->current_combination_key, "Shift_R");
+				safe_strcat(state->current_combination_key,
+							sizeof(state->current_combination_key), "Shift_R");
 				special_key_num++;
 				*link = k;
 				link = &(*link)->next;
@@ -1279,7 +1289,9 @@ static void handle_libinput_event(struct wsk_state *state,
 			if (state->ctrl_l_hold) {
 				struct wsk_keypress *k = calloc(1, sizeof(struct wsk_keypress));
 				strcpy(k->name, "Control_L");
-				strcat(state->current_combination_key, "Control_L");
+				safe_strcat(state->current_combination_key,
+							sizeof(state->current_combination_key),
+							"Control_L");
 				special_key_num++;
 				*link = k;
 				link = &(*link)->next;
@@ -1287,7 +1299,9 @@ static void handle_libinput_event(struct wsk_state *state,
 			if (state->ctrl_r_hold) {
 				struct wsk_keypress *k = calloc(1, sizeof(struct wsk_keypress));
 				strcpy(k->name, "Control_R");
-				strcat(state->current_combination_key, "Control_R");
+				safe_strcat(state->current_combination_key,
+							sizeof(state->current_combination_key),
+							"Control_R");
 				special_key_num++;
 				*link = k;
 				link = &(*link)->next;
@@ -1295,7 +1309,8 @@ static void handle_libinput_event(struct wsk_state *state,
 			if (state->super_l_hold) {
 				struct wsk_keypress *k = calloc(1, sizeof(struct wsk_keypress));
 				strcpy(k->name, "Super_L");
-				strcat(state->current_combination_key, "Super_L");
+				safe_strcat(state->current_combination_key,
+							sizeof(state->current_combination_key), "Super_L");
 				special_key_num++;
 				*link = k;
 				link = &(*link)->next;
@@ -1303,7 +1318,8 @@ static void handle_libinput_event(struct wsk_state *state,
 			if (state->supre_r_hold) {
 				struct wsk_keypress *k = calloc(1, sizeof(struct wsk_keypress));
 				strcpy(k->name, "Super_R");
-				strcat(state->current_combination_key, "Super_R");
+				safe_strcat(state->current_combination_key,
+							sizeof(state->current_combination_key), "Super_R");
 				special_key_num++;
 				*link = k;
 				link = &(*link)->next;
@@ -1311,7 +1327,8 @@ static void handle_libinput_event(struct wsk_state *state,
 			if (state->alt_l_hold) {
 				struct wsk_keypress *k = calloc(1, sizeof(struct wsk_keypress));
 				strcpy(k->name, "Alt_L");
-				strcat(state->current_combination_key, "Alt_L");
+				safe_strcat(state->current_combination_key,
+							sizeof(state->current_combination_key), "Alt_L");
 				special_key_num++;
 				*link = k;
 				link = &(*link)->next;
@@ -1319,14 +1336,16 @@ static void handle_libinput_event(struct wsk_state *state,
 			if (state->alt_r_hold) {
 				struct wsk_keypress *k = calloc(1, sizeof(struct wsk_keypress));
 				strcpy(k->name, "Alt_R");
-				strcat(state->current_combination_key, "Alt_R");
+				safe_strcat(state->current_combination_key,
+							sizeof(state->current_combination_key), "Alt_R");
 				special_key_num++;
 				*link = k;
 				link = &(*link)->next;
 			}
 
 			*link = keypress;
-			strcat(state->current_combination_key, keypress->name);
+			safe_strcat(state->current_combination_key,
+						sizeof(state->current_combination_key), keypress->name);
 			special_key_num++;
 
 			// 检测是否是连续的同一组合键，如果是就显示重复次数
@@ -1347,8 +1366,9 @@ static void handle_libinput_event(struct wsk_state *state,
 			} else {
 				memset(state->prev_combination_keye, 0,
 					   sizeof(state->prev_combination_keye));
-				strcat(state->prev_combination_keye,
-					   state->current_combination_key);
+				snprintf(state->prev_combination_keye,
+						 sizeof(state->prev_combination_keye), "%s",
+						 state->current_combination_key);
 				state->combination_keye_repetition = 1;
 			}
 		}
