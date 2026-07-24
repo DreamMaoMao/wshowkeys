@@ -44,7 +44,7 @@ struct wsk_state {
 
 	uint32_t foreground, background, specialfg;
 	const char *font;
-	int timeout;
+	int timeout;          // 单位：毫秒
 	int length_limit;
 
 	struct wl_display *display;
@@ -65,11 +65,10 @@ struct wsk_state {
 	struct xkb_context *xkb_context;
 	struct xkb_keymap *xkb_keymap;
 
-	struct wsk_keypress *keys; //the begin of the output keylink
+	struct wsk_keypress *keys;
 	struct timespec last_key;
 
 	bool run;
-	//state of function key
 	int ctrl_l_hold;
 	int ctrl_r_hold;
 	int alt_l_hold;
@@ -84,25 +83,6 @@ struct wsk_state {
 
 	int combination_keye_repetition;
 };
-
-/* void logtofile(const char *fmt, ...) { */
-/*   char buf[256]; */
-/*   char cmd[256]; */
-/*   va_list ap; */
-/*   va_start(ap, fmt); */
-/*   vsprintf((char *)buf, fmt, ap); */
-/*   va_end(ap); */
-/*   unsigned int i = strlen((const char *)buf); */
-/*  */
-/*   sprintf(cmd, "echo '%.*s' >> ~/log", i, buf); */
-/*   system(cmd); */
-/* } */
-/*  */
-/* void lognumtofile(unsigned int num) { */
-/*   char cmd[256]; */
-/*   sprintf(cmd, "echo '%x' >> ~/log", num); */
-/*   system(cmd); */
-/* } */
 
 static void cairo_set_source_u32(cairo_t *cairo, uint32_t color) {
 	cairo_set_source_rgba(cairo,
@@ -128,7 +108,6 @@ static cairo_subpixel_order_t to_cairo_subpixel_order(
 	}
 	return CAIRO_SUBPIXEL_ORDER_DEFAULT;
 }
-
 
 static int get_char_width(char *name) {
 	if(strstr("⏎ ␣ ⇦ ⇧ ⇨ ",name)){
@@ -158,8 +137,6 @@ static int get_char_width(char *name) {
 	}
 }
 
-
-//change default keyname to custom name
 static void custome_key_name(char *name){
     if (strcmp(name, "Return") == 0) {
         strcpy(name, "⏎ ");
@@ -228,10 +205,8 @@ static void custome_key_name(char *name){
     } else if (strcmp(name, "KP_Enter") == 0) {
         strcpy(name, "⏎ ");
     }
-
 }
 
-//show key in keylink(begin at state->keys)
 static void render_to_cairo(cairo_t *cairo, struct wsk_state *state,
 		int scale, uint32_t *width, uint32_t *height) {
 	cairo_set_operator(cairo, CAIRO_OPERATOR_SOURCE);
@@ -242,7 +217,7 @@ static void render_to_cairo(cairo_t *cairo, struct wsk_state *state,
 	while (key) {
 		bool special = false;
 		char *name = key->utf8;
-		if (!name[0]) { //whether key is special key
+		if (!name[0]) {
 			special = true;
 			cairo_set_source_u32(cairo, state->specialfg);
 			name = key->name;
@@ -284,38 +259,26 @@ static void render_frame(struct wsk_state *state) {
 	}
 	cairo_set_font_options(cairo, fo);
 	cairo_font_options_destroy(fo);
-	// set cairo state
 	cairo_save(cairo);
-	//set operation to clear
 	cairo_set_operator(cairo, CAIRO_OPERATOR_CLEAR);
-	//clear
 	cairo_paint(cairo);
-
-	//make cairo restore to no clear state
 	cairo_restore(cairo);
 
 	int scale = state->output ? state->output->scale : 1;
 	uint32_t width = 0, height = 0;
 
-	// paint keylink to screen
 	render_to_cairo(cairo, state, scale, &width, &height);
 	if (height / scale != state->height
 			|| width / scale != state->width
 			|| state->width == 0) {
-		// Reconfigure surface
 		if (width == 0 || height == 0) {
-//			wl_surface_attach(state->surface, NULL, 0, 0);
 			;
 		} else {
 			zwlr_layer_surface_v1_set_size(
 					state->layer_surface, width / scale, height / scale);
 		}
-
-		// TODO: this could infinite loop if the compositor assigns us a
-		// different height than what we asked for
 		wl_surface_commit(state->surface);
 	} else if (height > 0) {
-		// Replay recording into shm and send it off
 		if (!create_buffer(state->shm, &buffer, state->width * scale,
 				state->height * scale, WL_SHM_FORMAT_ARGB8888)) {
 			cairo_surface_destroy(recorder);
@@ -390,7 +353,7 @@ static void surface_enter(void *data,
 
 static void surface_leave(void *data,
 		struct wl_surface *wl_surface, struct wl_output *output) {
-	// Who cares (not really possible with layer shell)
+	// Who cares
 }
 
 static const struct wl_surface_listener wl_surface_listener = {
@@ -427,30 +390,16 @@ static void keyboard_keymap(void *data, struct wl_keyboard *wl_keyboard,
 }
 
 static void keyboard_enter(void *data, struct wl_keyboard *wl_keyboard,
-		uint32_t serial, struct wl_surface *surface, struct wl_array *keys) {
-	// Who cares
-}
-
+		uint32_t serial, struct wl_surface *surface, struct wl_array *keys) {}
 static void keyboard_leave(void *data, struct wl_keyboard *wl_keyboard,
-		uint32_t serial, struct wl_surface *surface) {
-	// Who cares
-}
-
+		uint32_t serial, struct wl_surface *surface) {}
 static void keyboard_key(void *data, struct wl_keyboard *wl_keyboard,
-		uint32_t serial, uint32_t time, uint32_t key, uint32_t state) {
-	// Who cares
-}
-
+		uint32_t serial, uint32_t time, uint32_t key, uint32_t state) {}
 static void keyboard_modifiers(void *data, struct wl_keyboard *wl_keyboard,
 		uint32_t serial, uint32_t mods_depressed, uint32_t mods_latched,
-		uint32_t mods_locked, uint32_t group) {
-	// Who cares
-}
-
+		uint32_t mods_locked, uint32_t group) {}
 static void keyboard_repeat_info(void *data, struct wl_keyboard *wl_keyboard,
-		int32_t rate, int32_t delay) {
-	// TODO
-}
+		int32_t rate, int32_t delay) {}
 
 static const struct wl_keyboard_listener wl_keyboard_listener = {
 	.keymap = keyboard_keymap,
@@ -465,23 +414,19 @@ static void seat_capabilities(
 		void *data, struct wl_seat *wl_seat, uint32_t capabilities) {
 	struct wsk_state *state = data;
 	if (state->keyboard) {
-		// TODO: support multiple seats
 		return;
 	}
-
 	if (!(capabilities & WL_SEAT_CAPABILITY_KEYBOARD)) {
 		fprintf(stderr, "wl_seat does not support keyboard");
 		state->run = false;
 		return;
 	}
-
 	state->keyboard = wl_seat_get_keyboard(wl_seat);
 	wl_keyboard_add_listener(state->keyboard, &wl_keyboard_listener, state);
 }
 
 static void seat_name(void *data, struct wl_seat *wl_seat, const char *name) {
 	struct wsk_state *state = data;
-	/* TODO: support multiple seats */
 	if (libinput_udev_assign_seat(state->libinput, "seat0") != 0) {
 		fprintf(stderr, "Failed to assign libinput seat\n");
 		state->run = false;
@@ -501,16 +446,9 @@ static void output_geometry(void *data, struct wl_output *wl_output,
 	struct wsk_output *output = data;
 	output->subpixel = subpixel;
 }
-
 static void output_mode(void *data, struct wl_output *wl_output,
-		uint32_t flags, int32_t width, int32_t height, int32_t refresh) {
-	// Who cares
-}
-
-static void output_done(void *data, struct wl_output *wl_output) {
-	// Who cares
-}
-
+		uint32_t flags, int32_t width, int32_t height, int32_t refresh) {}
+static void output_done(void *data, struct wl_output *wl_output) {}
 static void output_scale(void *data,
 		struct wl_output *wl_output, int32_t factor) {
 	struct wsk_output *output = data;
@@ -524,7 +462,6 @@ static const struct wl_output_listener wl_output_listener = {
 	.scale = output_scale,
 };
 
-//add keyboard event listen
 static void registry_global(void *data, struct wl_registry *wl_registry,
 		uint32_t name, const char *interface, uint32_t version) {
 	struct wsk_state *state = data;
@@ -557,9 +494,7 @@ static void registry_global(void *data, struct wl_registry *wl_registry,
 }
 
 static void registry_global_remove(void *data,
-		struct wl_registry *wl_registry, uint32_t name) {
-	/* This space deliberately left blank */
-}
+		struct wl_registry *wl_registry, uint32_t name) {}
 
 static const struct wl_registry_listener registry_listener = {
 	.global = registry_global,
@@ -568,11 +503,7 @@ static const struct wl_registry_listener registry_listener = {
 
 static int caculat_del_charnum_of_int(int num) {
   int count = 0; 
-
-	if (num == 1 ) {
-		return 0;
-	}
-
+  if (num == 1 ) return 0;
   while (num != 0) { 
     num /= 10; 
     ++count; 
@@ -582,14 +513,12 @@ static int caculat_del_charnum_of_int(int num) {
 
 static int caculat_add_charnum_of_int(int num) {
   int count = 0; 
-
   while (num != 0) { 
     num /= 10; 
     ++count; 
   }
   return count + 1;
 }
-
 
 static void del_last_key(struct wsk_state *state,int n) {
 	struct wsk_keypress **temp_keypress;
@@ -611,7 +540,6 @@ static void del_last_key(struct wsk_state *state,int n) {
 
 static void attach_to_last(struct wsk_state *state,struct wsk_keypress *key) {
 	struct wsk_keypress **attach = &state->keys;
-	//get the end of the output keylink
 	while (*attach) {
 		attach = &(*attach)->next;
 	}
@@ -620,36 +548,16 @@ static void attach_to_last(struct wsk_state *state,struct wsk_keypress *key) {
 
 static void change_numchar_to_special(char *target,char numchar) {
 	switch(numchar){
-    case '0':
-		strcpy(target,"₀");
-       	break;
-    case '1':
-		strcpy(target,"₁");
-       	break; 
-    case '2':
-		strcpy(target,"₂");
-       	break; 
-    case '3':
-		strcpy(target,"₃");
-       	break; 
-    case '4':
-		strcpy(target,"₄");
-       break; 
-    case '5':
-		strcpy(target,"₅");
-       	break; 
-    case '6':
-		strcpy(target,"₆");
-       	break; 
-    case '7':
-		strcpy(target,"₇");
-       	break; 
-    case '8':
-		strcpy(target,"₈");
-       	break; 
-    case '9':
-		strcpy(target,"₉");
-       	break; 
+    case '0': strcpy(target,"₀"); break;
+    case '1': strcpy(target,"₁"); break;
+    case '2': strcpy(target,"₂"); break;
+    case '3': strcpy(target,"₃"); break;
+    case '4': strcpy(target,"₄"); break;
+    case '5': strcpy(target,"₅"); break;
+    case '6': strcpy(target,"₆"); break;
+    case '7': strcpy(target,"₇"); break;
+    case '8': strcpy(target,"₈"); break;
+    case '9': strcpy(target,"₉"); break;
 	}
 }
 
@@ -662,17 +570,13 @@ static void attach_repeat_flag(struct wsk_state *state,int num,int num_len) {
 	sprintf(repeat_num_char, "%d", num);	
 
 	for (int i = 0; i < num_len; i++) {
-	//   printf("%c\n", a[i]); // 打印每个字符
 		struct wsk_keypress *repeat_num = calloc(1, sizeof(struct wsk_keypress));
 		change_numchar_to_special(repeat_num->name,repeat_num_char[i]);
 		attach_to_last(state,repeat_num);
 	}
-
 	free(repeat_num_char);
-
 }
 
-//listen key keydown and record to keylink
 static void handle_libinput_event(struct wsk_state *state,
 		struct libinput_event *event) {
 	if (!state->xkb_state) {
@@ -708,61 +612,38 @@ static void handle_libinput_event(struct wsk_state *state,
 		keypress->utf8[0] = '\0';
 	}
 
-	// clear current_combination_key
 	memset(state->current_combination_key, 0, sizeof(state->current_combination_key));
 	int special_key_num = 0;
 
 	switch (key_state) {
 	case LIBINPUT_KEY_STATE_RELEASED:
-		//if 'ctrl shift alt super' release, clear it's press state
 		if(strlen(keypress->name) > 2 && strstr("Control_LControl_RAlt_LAlt_RSuper_LSuper_RShift_LShift_RMeta_LMeta_R",keypress->name)){
-			if(strcmp(keypress->name,"Control_L")==0){
-				state->ctrl_l_hold = 0;
-			} else if(strcmp(keypress->name,"Control_R")==0){
-				state->ctrl_r_hold = 0;
-			} else if(strcmp(keypress->name,"Alt_L")==0 || strcmp(keypress->name,"Meta_L")==0){
-				state->alt_l_hold = 0;
-			} else if(strcmp(keypress->name,"Alt_R")==0 || strcmp(keypress->name,"Meta_R")==0){
-				state->alt_r_hold = 0;
-			} else if(strcmp(keypress->name,"Super_L")==0){
-				state->super_l_hold = 0;
-			} else if(strcmp(keypress->name,"Super_R")==0){
-				state->supre_r_hold = 0;
-			} else if(strcmp(keypress->name,"Shift_L")==0){
-				state->shift_l_hold = 0;
-			} else if(strcmp(keypress->name,"Shift_R")==0){
-				state->shift_r_hold = 0;
-			}
+			if(strcmp(keypress->name,"Control_L")==0) state->ctrl_l_hold = 0;
+			else if(strcmp(keypress->name,"Control_R")==0) state->ctrl_r_hold = 0;
+			else if(strcmp(keypress->name,"Alt_L")==0 || strcmp(keypress->name,"Meta_L")==0) state->alt_l_hold = 0;
+			else if(strcmp(keypress->name,"Alt_R")==0 || strcmp(keypress->name,"Meta_R")==0) state->alt_r_hold = 0;
+			else if(strcmp(keypress->name,"Super_L")==0) state->super_l_hold = 0;
+			else if(strcmp(keypress->name,"Super_R")==0) state->supre_r_hold = 0;
+			else if(strcmp(keypress->name,"Shift_L")==0) state->shift_l_hold = 0;
+			else if(strcmp(keypress->name,"Shift_R")==0) state->shift_r_hold = 0;
 		} 
 		break;
 	case LIBINPUT_KEY_STATE_PRESSED:
-		//if 'ctrl shift alt super' press,mark it's press state
 		if(strlen(keypress->name) > 2 && strstr("Control_LControl_RAlt_LAlt_RSuper_LSuper_RShift_LShift_RMeta_LMeta_R",keypress->name)){
-			if(strcmp(keypress->name,"Control_L")==0){
-				state->ctrl_l_hold = 1;
-			} else if(strcmp(keypress->name,"Control_R")==0){
-				state->ctrl_r_hold = 1;
-			} else if(strcmp(keypress->name,"Alt_L")==0 || strcmp(keypress->name,"Meta_L")==0){
-				state->alt_l_hold = 1;
-			} else if(strcmp(keypress->name,"Alt_R")==0 || strcmp(keypress->name,"Meta_R")==0){
-				state->alt_r_hold = 1;
-			} else if(strcmp(keypress->name,"Super_L")==0){
-				state->super_l_hold = 1;
-			} else if(strcmp(keypress->name,"Super_R")==0){
-				state->supre_r_hold = 1;
-			} else if(strcmp(keypress->name,"Shift_L")==0){
-				state->shift_l_hold = 1;
-			} else if(strcmp(keypress->name,"Shift_R")==0){
-				state->shift_r_hold = 1;
-			}
+			if(strcmp(keypress->name,"Control_L")==0) state->ctrl_l_hold = 1;
+			else if(strcmp(keypress->name,"Control_R")==0) state->ctrl_r_hold = 1;
+			else if(strcmp(keypress->name,"Alt_L")==0 || strcmp(keypress->name,"Meta_L")==0) state->alt_l_hold = 1;
+			else if(strcmp(keypress->name,"Alt_R")==0 || strcmp(keypress->name,"Meta_R")==0) state->alt_r_hold = 1;
+			else if(strcmp(keypress->name,"Super_L")==0) state->super_l_hold = 1;
+			else if(strcmp(keypress->name,"Super_R")==0) state->supre_r_hold = 1;
+			else if(strcmp(keypress->name,"Shift_L")==0) state->shift_l_hold = 1;
+			else if(strcmp(keypress->name,"Shift_R")==0) state->shift_r_hold = 1;
 		} else {
 			struct wsk_keypress **link = &state->keys;
-			//get the end of the output keylink
 			while (*link) {
 				link = &(*link)->next;
 			}
 
-			// if 'ctrl shift alt super' still press,make a key node to output end
 			if(state->shift_l_hold) {
 				struct wsk_keypress *temp_keypress = calloc(1, sizeof(struct wsk_keypress));
 				strcpy(temp_keypress->name,"Shift_L");
@@ -828,20 +709,15 @@ static void handle_libinput_event(struct wsk_state *state,
 				link = &(*link)->next;
 			}
 
-			//add other key to end of output keylink
 			*link = keypress;
 			strcat(state->current_combination_key, keypress->name);
 			special_key_num ++;
 
-			// detect repeat key
 			if (strcmp(state->prev_combination_keye,"") != 0 && strcmp(state->prev_combination_keye,state->current_combination_key) == 0) {
-				
 				int del_charnum = caculat_del_charnum_of_int(state->combination_keye_repetition);
 				if (state->combination_keye_repetition > 2)
 					del_last_key(state,special_key_num + del_charnum);
-
 				state->combination_keye_repetition ++;
-
 				if (state->combination_keye_repetition > 2) {
 					int add_charnum = caculat_add_charnum_of_int(state->combination_keye_repetition);
 					attach_repeat_flag(state,state->combination_keye_repetition,add_charnum);
@@ -878,7 +754,6 @@ static uint32_t parse_color(const char *color) {
 	if (color[0] == '#') {
 		++color;
 	}
-
 	int len = strlen(color);
 	if (len != 6 && len != 8) {
 		fprintf(stderr, "Invalid color %s, defaulting to color "
@@ -892,7 +767,8 @@ static uint32_t parse_color(const char *color) {
 	return res;
 }
 
-void clear_full_keylink(struct wsk_keypress *key,struct wsk_state *state) {
+static void clear_full_keylink(struct wsk_state *state) {
+	struct wsk_keypress *key = state->keys;
 	while (key) {
 		struct wsk_keypress *next = key->next;
 		free(key);
@@ -906,13 +782,11 @@ void clear_full_keylink(struct wsk_keypress *key,struct wsk_state *state) {
 }
 
 int main(int argc, char *argv[]) {
-	/* NOTICE: This code runs as root */
 	struct wsk_state state = { 0 };
 	if (devmgr_start(&state.devmgr, &state.devmgr_pid, INPUTDEVPATH) > 0) {
 		return 1;
 	}
 
-	/* Begin normal user code: */
 	int ret = 0;
 
 	unsigned int anchor = 0;
@@ -1032,8 +906,6 @@ int main(int argc, char *argv[]) {
 		}
 	}
 
-	// TODO: Listener for xdg output
-
 	wl_seat_add_listener(state.seat, &wl_seat_listener, &state);
 	wl_display_roundtrip(state.display);
 	
@@ -1046,10 +918,9 @@ int main(int argc, char *argv[]) {
 			ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY, "showkeys");
 	assert(state.layer_surface);
 
-	// 创建空的输入区域
 	struct wl_region *input_region = wl_compositor_create_region(state.compositor);
 	wl_surface_set_input_region(state.surface, input_region);
-	wl_region_destroy(input_region); // 销毁region，因为surface已经复制了一份
+	wl_region_destroy(input_region);
 
 	zwlr_layer_surface_v1_add_listener(
 			state.layer_surface, &layer_surface_listener, &state);
@@ -1075,50 +946,56 @@ int main(int argc, char *argv[]) {
 			}
 		} while (errno == EAGAIN);
 
-		int timeout = -1;
+		// 超时与 poll 超时计算
+		struct timespec now;
+		clock_gettime(CLOCK_MONOTONIC, &now);
+		int poll_timeout = -1;
+
 		if (state.keys) {
-			timeout = 200;
+			// 计算距离上次按键过去了多少毫秒
+			long elapsed_ms = (now.tv_sec - state.last_key.tv_sec) * 1000 +
+			                  (now.tv_nsec - state.last_key.tv_nsec) / 1000000;
+
+			if (elapsed_ms >= state.timeout) {
+				// 已经超时，立即清除
+				clear_full_keylink(&state);
+			} else {
+				// 还没超时，设置 poll 等到剩余时间
+				poll_timeout = state.timeout - (int)elapsed_ms;
+				if (poll_timeout < 1) poll_timeout = 1;  // 至少 1ms
+			}
 		}
 
-		if (poll(pollfds, sizeof(pollfds) / sizeof(pollfds[0]), timeout) < 0) {
+		if (poll(pollfds, sizeof(pollfds) / sizeof(pollfds[0]), poll_timeout) < 0) {
 			fprintf(stderr, "poll: %s\n", strerror(errno));
 			break;
 		}
 
-		/* Clear out old keys */
-		struct timespec now;
-		struct wsk_keypress *key = state.keys;
-		int all_key_len = 0;
-
+		// 再次获取时间，用于长度限制检查
 		clock_gettime(CLOCK_MONOTONIC, &now);
-		// when reach timeout limit,clear full keylink
-		if (state.timeout < 1000 && now.tv_sec > state.last_key.tv_sec + 1) {
-			clear_full_keylink(key,&state);
-		} else if (state.timeout < 1000 && now.tv_sec == state.last_key.tv_sec &&
-				now.tv_nsec > state.last_key.tv_nsec + (state.timeout * 1000000) ){
-			clear_full_keylink(key,&state);			
-		} else if (state.timeout >= 1000 && now.tv_sec > state.last_key.tv_sec + (state.timeout/1000)) {
-			clear_full_keylink(key,&state);
-		} else {
-			//caulate whether output len is reach len max limit
+
+		// 长度限制检查
+		if (state.keys) {
+			int all_key_len = 0;
 			char *temp_name = calloc(1, 129);
+			struct wsk_keypress *key = state.keys;
 			while (key) {
-				strcpy(temp_name,key->name);
+				strcpy(temp_name, key->name);
 				custome_key_name(temp_name);
-				all_key_len = all_key_len + get_char_width(temp_name);
-				struct wsk_keypress *next = key->next;
-				key = next;
+				all_key_len += get_char_width(temp_name);
+				key = key->next;
 			}
 			free(temp_name);
-			if(all_key_len > state.length_limit){ //reach len max limit
-				key = state.keys;
-				struct wsk_keypress *next = key->next;
-				free(key); //del the begin key in keylink
-				state.keys = next; // next key become begin key in keylink
-				set_dirty(&state);					
+			if (all_key_len > state.length_limit) {
+				// 删除链表头，缩短显示
+				struct wsk_keypress *next = state.keys->next;
+				free(state.keys);
+				state.keys = next;
+				set_dirty(&state);
 			}
 		}
 
+		/* 处理 libinput 事件 */
 		if ((pollfds[0].revents & POLLIN)) {
 			if (libinput_dispatch(state.libinput) != 0) {
 				fprintf(stderr, "libinput_dispatch: %s\n", strerror(errno));
@@ -1131,6 +1008,7 @@ int main(int argc, char *argv[]) {
 			}
 		}
 
+		/* 处理 Wayland 事件 */
 		if ((pollfds[1].revents & POLLIN)
 				&& wl_display_dispatch(state.display) == -1) {
 			fprintf(stderr, "wl_display_dispatch: %s\n", strerror(errno));
