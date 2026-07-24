@@ -61,6 +61,7 @@ wshowkeys [-b|-f|-s #RRGGBB[AA]] [-F font] [-t timeout]
 - *-l lenmax*: set the key layer lenmax
 - *-o output*: request wshowkeys is shown on the specified output
   (unimplemented)
+- *-M*: show modifier keys
 
 example:
 ```bash
