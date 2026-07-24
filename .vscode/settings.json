@@ -4,6 +4,7 @@
         "chrono": "c",
         "typeindex": "c",
         "typeinfo": "c",
-        "random": "c"
+        "random": "c",
+        "types.h": "c"
     }
 }

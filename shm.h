@@ -5,6 +5,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <wayland-client.h>   // 定义了 struct wl_shm
 
 int create_shm_file(void);
 int allocate_shm_file(size_t size);
