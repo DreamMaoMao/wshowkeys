@@ -4,12 +4,7 @@ Displays keypresses on screen on supported Wayland compositors (requires
 `wlr_layer_shell_v1` support).
 
 
-
-
-https://github.com/DreamMaoMao/myshowkey/assets/30348075/944d9e92-ea6f-4017-9b50-11ba1a34ee32
-
-
-
+https://github.com/user-attachments/assets/1a0b201d-7b2b-42cd-b83a-dcb6f31f0cbf
 
 
 Forked from https://git.sr.ht/~sircmpwn/wshowkeys as Drew has moved onto other thigns.
