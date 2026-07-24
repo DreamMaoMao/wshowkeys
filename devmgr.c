@@ -7,6 +7,7 @@
 #ifdef __FreeBSD__
 #define __BSD_VISIBLE 1
 #endif
+#include "devmgr.h"
 #include <errno.h>
 #include <fcntl.h>
 #include <libinput.h>
@@ -15,12 +16,11 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
-#include <sys/stat.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
-#include "devmgr.h"
 
 enum msg_type {
 	MSG_OPEN,
@@ -34,7 +34,7 @@ struct msg {
 
 static ssize_t recv_msg(int sock, int *fd_out, void *buf, size_t buf_len) {
 	char control[CMSG_SPACE(sizeof(*fd_out))] = {0};
-	struct iovec iovec = { .iov_base = buf, .iov_len = buf_len };
+	struct iovec iovec = {.iov_base = buf, .iov_len = buf_len};
 	struct msghdr msghdr = {0};
 
 	if (buf) {
@@ -66,7 +66,7 @@ static ssize_t recv_msg(int sock, int *fd_out, void *buf, size_t buf_len) {
 
 static void send_msg(int sock, int fd, void *buf, size_t buf_len) {
 	char control[CMSG_SPACE(sizeof(fd))] = {0};
-	struct iovec iovec = { .iov_base = buf, .iov_len = buf_len };
+	struct iovec iovec = {.iov_base = buf, .iov_len = buf_len};
 	struct msghdr msghdr = {0};
 
 	if (buf) {
@@ -79,7 +79,7 @@ static void send_msg(int sock, int fd, void *buf, size_t buf_len) {
 		msghdr.msg_controllen = sizeof(control);
 
 		struct cmsghdr *cmsg = CMSG_FIRSTHDR(&msghdr);
-		*cmsg = (struct cmsghdr) {
+		*cmsg = (struct cmsghdr){
 			.cmsg_level = SOL_SOCKET,
 			.cmsg_type = SCM_RIGHTS,
 			.cmsg_len = CMSG_LEN(sizeof(fd)),
@@ -106,7 +106,8 @@ static void devmgr_run(int sockfd, const char *devpath) {
 				/* Hackerman detected */
 				exit(1);
 			}
-			int fd = open(msg.path, O_RDONLY|O_CLOEXEC|O_NOCTTY|O_NONBLOCK);
+			int fd =
+				open(msg.path, O_RDONLY | O_CLOEXEC | O_NOCTTY | O_NONBLOCK);
 			int ret = errno;
 			send_msg(sockfd, ret ? -1 : fd, &ret, sizeof(ret));
 			if (fd >= 0) {
@@ -166,7 +167,7 @@ int devmgr_start(int *fd, pid_t *pid, const char *devpath) {
 }
 
 int devmgr_open(int sockfd, const char *path) {
-	struct msg msg = { .msg_type = MSG_OPEN };
+	struct msg msg = {.msg_type = MSG_OPEN};
 	snprintf(msg.path, sizeof(msg.path), "%s", path);
 
 	send_msg(sockfd, -1, &msg, sizeof(msg));
@@ -181,7 +182,7 @@ int devmgr_open(int sockfd, const char *path) {
 }
 
 void devmgr_finish(int sock, pid_t pid) {
-	struct msg msg = { .msg_type = MSG_END };
+	struct msg msg = {.msg_type = MSG_END};
 
 	send_msg(sock, -1, &msg, sizeof(msg));
 	recv_msg(sock, NULL, NULL, 0);

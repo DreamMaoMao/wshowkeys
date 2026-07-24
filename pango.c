@@ -1,3 +1,4 @@
+#include "cairo.h"
 #include <cairo/cairo.h>
 #include <pango/pangocairo.h>
 #include <stdarg.h>
@@ -6,10 +7,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "cairo.h"
 
 PangoLayout *get_pango_layout(cairo_t *cairo, const char *font,
-		const char *text, double scale) {
+							  const char *text, double scale) {
 	PangoLayout *layout = pango_cairo_create_layout(cairo);
 	PangoAttrList *attrs = pango_attr_list_new();
 	pango_layout_set_text(layout, text, -1);
@@ -24,7 +24,7 @@ PangoLayout *get_pango_layout(cairo_t *cairo, const char *font,
 }
 
 void get_text_size(cairo_t *cairo, const char *font, int *width, int *height,
-		int *baseline, double scale, const char *fmt, ...) {
+				   int *baseline, double scale, const char *fmt, ...) {
 	va_list args;
 	va_start(args, fmt);
 	// Add one since vsnprintf excludes null terminator.
@@ -50,7 +50,7 @@ void get_text_size(cairo_t *cairo, const char *font, int *width, int *height,
 }
 
 void pango_printf(cairo_t *cairo, const char *font, double scale,
-		const char *fmt, ...) {
+				  const char *fmt, ...) {
 	va_list args;
 	va_start(args, fmt);
 	// Add one since vsnprintf excludes null terminator.
