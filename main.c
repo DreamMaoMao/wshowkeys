@@ -165,6 +165,7 @@ struct wsk_state {
     int length_limit;
     bool show_mods;           /* -M 选项控制 */
     bool show_mouse_buttons;  /* -U 选项控制 */
+    bool show_scroll;         /* -S 选项控制 */
 
     struct wl_display *display;
     struct wl_registry *registry;
@@ -202,6 +203,11 @@ struct wsk_state {
 
     /* 鼠标按钮状态 */
     int mouse_left, mouse_middle, mouse_right;
+
+    /* 滚轮状态 */
+    int scroll_up_active;
+    int scroll_down_active;
+    struct timespec last_scroll;
 
     char current_combination_key[128];
     char prev_combination_keye[128];
@@ -314,7 +320,7 @@ static void get_text_metrics(cairo_t *cairo, const char *font, const char *text,
     g_object_unref(layout);
 }
 
-/* 计算修饰键面板的固定像素尺寸（包含可选鼠标按钮） */
+/* 计算修饰键面板的固定像素尺寸（包含可选鼠标按钮和滚轮指示器） */
 static void calc_mods_size(struct wsk_state *state, int scale,
                            uint32_t *width, uint32_t *height) {
     cairo_surface_t *dummy = cairo_recording_surface_create(CAIRO_CONTENT_COLOR_ALPHA, NULL);
@@ -335,7 +341,7 @@ static void calc_mods_size(struct wsk_state *state, int scale,
         if (bl > max_bl) max_bl = bl;
     }
 
-    /* 鼠标按钮文字尺寸（只影响宽度，不影响 box 高度） */
+    /* 鼠标按钮文字尺寸 */
     if (state->show_mouse_buttons) {
         const char *mouse_names[] = {"L", "M", "R"};
         for (int i = 0; i < 3; i++) {
@@ -347,16 +353,30 @@ static void calc_mods_size(struct wsk_state *state, int scale,
         }
     }
 
+    /* 滚轮指示器文字尺寸 */
+    if (state->show_scroll) {
+        const char *scroll_names[] = {"▲", "▼"};
+        for (int i = 0; i < 2; i++) {
+            int tw, th, bl;
+            get_text_metrics(cairo, mod_font, scroll_names[i], scale, &tw, &th, &bl);
+            if (tw > max_tw) max_tw = tw;
+            if (th > max_th) max_th = th;
+            if (bl > max_bl) max_bl = bl;
+        }
+    }
+
     int box_w = max_tw + 2 * pad_h;
     int box_h = max_th + 2 * pad_v;
-    int total_boxes = num_mods + (state->show_mouse_buttons ? 3 : 0);
+    int total_boxes = num_mods;
+    if (state->show_mouse_buttons) total_boxes += 3;
+    if (state->show_scroll) total_boxes += 2;
     *width = total_boxes * box_w + (total_boxes - 1) * gap;
     *height = box_h;
     cairo_destroy(cairo);
     cairo_surface_destroy(dummy);
 }
 
-/* 只绘制修饰键框和文字（含可选鼠标按钮） */
+/* 只绘制修饰键框和文字（含可选鼠标按钮和滚轮指示器） */
 static void render_mods_only(cairo_t *cairo, struct wsk_state *state, int scale,
                              uint32_t *width, uint32_t *height) {
     char mod_font[256];
@@ -373,7 +393,7 @@ static void render_mods_only(cairo_t *cairo, struct wsk_state *state, int scale,
 
     int max_tw = 0, max_th = 0, max_bl = 0;
 
-    /* 先测量所有修饰键文字尺寸 */
+    /* 先测量所有要绘制的文字尺寸 */
     for (int i = 0; i < num_mods; i++) {
         int tw, th, bl;
         get_text_metrics(cairo, mod_font, mod_names[i], scale, &tw, &th, &bl);
@@ -381,8 +401,6 @@ static void render_mods_only(cairo_t *cairo, struct wsk_state *state, int scale,
         if (th > max_th) max_th = th;
         if (bl > max_bl) max_bl = bl;
     }
-
-    /* 如果显示鼠标按钮，测量其文字以确保 box 足够大 */
     if (state->show_mouse_buttons) {
         const char *mouse_names[] = {"L", "M", "R"};
         for (int i = 0; i < 3; i++) {
@@ -393,16 +411,30 @@ static void render_mods_only(cairo_t *cairo, struct wsk_state *state, int scale,
             if (bl > max_bl) max_bl = bl;
         }
     }
+    if (state->show_scroll) {
+        const char *scroll_names[] = {"▲", "▼"};
+        for (int i = 0; i < 2; i++) {
+            int tw, th, bl;
+            get_text_metrics(cairo, mod_font, scroll_names[i], scale, &tw, &th, &bl);
+            if (tw > max_tw) max_tw = tw;
+            if (th > max_th) max_th = th;
+            if (bl > max_bl) max_bl = bl;
+        }
+    }
 
     int box_w = max_tw + 2 * pad_h;
     int box_h = max_th + 2 * pad_v;
-    int total_boxes = num_mods + (state->show_mouse_buttons ? 3 : 0);
+    int total_boxes = num_mods;
+    if (state->show_mouse_buttons) total_boxes += 3;
+    if (state->show_scroll) total_boxes += 2;
     uint32_t total_w = total_boxes * box_w + (total_boxes - 1) * gap;
     uint32_t total_h = box_h;
 
+    int box_index = 0;
+
     /* 绘制修饰键按钮 */
     for (int i = 0; i < num_mods; i++) {
-        int x = i * (box_w + gap);
+        int x = box_index * (box_w + gap);
         int y = 0;
 
         if (mod_active[i])
@@ -432,6 +464,7 @@ static void render_mods_only(cairo_t *cairo, struct wsk_state *state, int scale,
         cairo_move_to(cairo, text_x, text_y);
         pango_cairo_show_layout(cairo, layout);
         g_object_unref(layout);
+        box_index++;
     }
 
     /* 绘制鼠标按钮（如果启用） */
@@ -443,7 +476,7 @@ static void render_mods_only(cairo_t *cairo, struct wsk_state *state, int scale,
             state->mouse_right
         };
         for (int i = 0; i < 3; i++) {
-            int x = (num_mods + i) * (box_w + gap);
+            int x = box_index * (box_w + gap);
             int y = 0;
 
             if (mouse_active[i])
@@ -473,6 +506,49 @@ static void render_mods_only(cairo_t *cairo, struct wsk_state *state, int scale,
             cairo_move_to(cairo, text_x, text_y);
             pango_cairo_show_layout(cairo, layout);
             g_object_unref(layout);
+            box_index++;
+        }
+    }
+
+    /* 绘制滚轮指示器（如果启用） */
+    if (state->show_scroll) {
+        const char *scroll_names[] = {"▲", "▼"};
+        bool scroll_active[] = {
+            state->scroll_up_active,
+            state->scroll_down_active
+        };
+        for (int i = 0; i < 2; i++) {
+            int x = box_index * (box_w + gap);
+            int y = 0;
+
+            if (scroll_active[i])
+                cairo_set_source_u32(cairo, state->specialfg);
+            else
+                cairo_set_source_u32(cairo, state->background);
+            cairo_rectangle(cairo, x, y, box_w, box_h);
+            cairo_fill_preserve(cairo);
+            cairo_set_source_u32(cairo, state->foreground);
+            cairo_set_line_width(cairo, 2.0);
+            cairo_stroke(cairo);
+
+            cairo_set_source_u32(cairo, scroll_active[i] ? state->background : state->foreground);
+
+            PangoLayout *layout = pango_cairo_create_layout(cairo);
+            PangoFontDescription *desc = pango_font_description_from_string(mod_font);
+            pango_layout_set_font_description(layout, desc);
+            pango_font_description_free(desc);
+            pango_layout_set_text(layout, scroll_names[i], -1);
+
+            PangoRectangle logical;
+            pango_layout_get_pixel_extents(layout, NULL, &logical);
+            int tw = logical.width;
+            int text_x = x + pad_h + (max_tw - tw) / 2;
+            int text_y = y + pad_v + max_bl;
+
+            cairo_move_to(cairo, text_x, text_y);
+            pango_cairo_show_layout(cairo, layout);
+            g_object_unref(layout);
+            box_index++;
         }
     }
 
@@ -924,9 +1000,31 @@ static void handle_libinput_event(struct wsk_state *state,
             case BTN_LEFT:   state->mouse_left = pressed;   break;
             case BTN_MIDDLE: state->mouse_middle = pressed; break;
             case BTN_RIGHT:  state->mouse_right = pressed;  break;
-            default: return; /* 忽略其他按键 */
+            default: return;
         }
         set_dirty(state);
+        return;
+    }
+
+    /* 处理滚轮事件 */
+    if (libinput_event_get_type(event) == LIBINPUT_EVENT_POINTER_AXIS) {
+        struct libinput_event_pointer *pev =
+            libinput_event_get_pointer_event(event);
+        double value = libinput_event_pointer_get_axis_value(
+            pev, LIBINPUT_POINTER_AXIS_SCROLL_VERTICAL);
+        if (value > 0.0) {
+            state->scroll_down_active = 1;
+            state->scroll_up_active = 0;
+        } else if (value < 0.0) {
+            state->scroll_up_active = 1;
+            state->scroll_down_active = 0;
+        } else {
+            // 忽略零值
+        }
+        if (value != 0.0) {
+            clock_gettime(CLOCK_MONOTONIC, &state->last_scroll);
+            set_dirty(state);
+        }
         return;
     }
 
@@ -1143,9 +1241,12 @@ int main(int argc, char *argv[]) {
     state.pending_clear = false;
     state.show_mods = false;
     state.show_mouse_buttons = false;
+    state.show_scroll = false;
+    state.scroll_up_active = 0;
+    state.scroll_down_active = 0;
 
     int c;
-    while ((c = getopt(argc, argv, "hb:f:s:F:t:a:m:o:l:MU")) != -1) {
+    while ((c = getopt(argc, argv, "hb:f:s:F:t:a:m:o:l:MUS")) != -1) {
         switch (c) {
         case 'l': state.length_limit = atoi(optarg); break;
         case 'b': state.background = parse_color(optarg); break;
@@ -1166,6 +1267,7 @@ int main(int argc, char *argv[]) {
         case 'm': margin = atoi(optarg); break;
         case 'M': state.show_mods = true; break;
         case 'U': state.show_mouse_buttons = true; break;
+        case 'S': state.show_scroll = true; break;
         case 'o':
             fprintf(stderr, "-o is unimplemented\n");
             return 0;
@@ -1173,13 +1275,13 @@ int main(int argc, char *argv[]) {
             fprintf(stderr,
                     "usage: wshowkeys [-b|-f|-s #RRGGBB[AA]] [-F font] "
                     "[-t timeout]\n\t[-a top|left|right|bottom] [-m margin] "
-                    "[-M] [-U] [-o output] [-l numOfLengthLimit]\n");
+                    "[-M] [-U] [-S] [-o output] [-l numOfLengthLimit]\n");
             return 1;
         }
     }
 
-    /* -U 自动启用 -M，确保面板可见 */
-    if (state.show_mouse_buttons)
+    /* -U 或 -S 自动启用 -M，确保面板可见 */
+    if (state.show_mouse_buttons || state.show_scroll)
         state.show_mods = true;
 
     state.udev = udev_new();
@@ -1277,6 +1379,8 @@ int main(int argc, char *argv[]) {
 
         struct timespec now;
         clock_gettime(CLOCK_MONOTONIC, &now);
+
+        /* 按键显示超时检查 */
         int poll_timeout = -1;
         if (state.keys) {
             long elapsed_ms = (now.tv_sec - state.last_key.tv_sec) * 1000 +
@@ -1292,9 +1396,26 @@ int main(int argc, char *argv[]) {
             }
         }
 
+        /* 滚轮指示器超时检查 */
+        if (state.show_scroll && (state.scroll_up_active || state.scroll_down_active)) {
+            long elapsed_ms = (now.tv_sec - state.last_scroll.tv_sec) * 1000 +
+                              (now.tv_nsec - state.last_scroll.tv_nsec) / 1000000;
+            if (elapsed_ms >= state.timeout) {
+                state.scroll_up_active = 0;
+                state.scroll_down_active = 0;
+                set_dirty(&state);
+            } else {
+                int remaining = state.timeout - (int)elapsed_ms;
+                if (poll_timeout < 0 || remaining < poll_timeout)
+                    poll_timeout = remaining;
+                if (poll_timeout < 1) poll_timeout = 1;
+            }
+        }
+
         if (poll(pollfds, 2, poll_timeout) < 0) break;
         clock_gettime(CLOCK_MONOTONIC, &now);
 
+        /* 按键长度限制 */
         if (state.keys) {
             int all_key_len = 0;
             char *temp_name = calloc(1, 129);
