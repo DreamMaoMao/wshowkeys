@@ -55,6 +55,7 @@ executable(
 	'wshowkeys',
 	files(
 		'main.c',
+    'devmgr.c'
 	),
 	dependencies: [
 		cairo,

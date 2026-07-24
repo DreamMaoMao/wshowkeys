@@ -1,3 +1,4 @@
+#include "devmgr.h"
 #include "wlr-layer-shell-unstable-v1-client-protocol.h"
 #include "xdg-output-unstable-v1-client-protocol.h"
 #include <assert.h>
@@ -20,6 +21,9 @@
 #include <unistd.h>
 #include <wayland-client.h>
 #include <xkbcommon/xkbcommon.h>
+#ifndef INPUTDEVPATH
+#define INPUTDEVPATH "/dev/input/"
+#endif
 
 /* ---- 共享内存 buffer 的简单封装 ---- */
 struct pool_buffer {
@@ -128,28 +132,6 @@ static void pango_printf(cairo_t *cairo, const char *font, int scale,
 	g_object_unref(layout);
 }
 
-/* ---- libinput 设备打开辅助 ---- */
-#ifndef INPUTDEVPATH
-#define INPUTDEVPATH "/dev/input/"
-#endif
-
-static int devmgr_start(int *fd, pid_t *pid, const char *path) {
-	// 这里不维护子进程，直接返回成功
-	*fd = -1;
-	*pid = 0;
-	return 0;
-}
-
-static void devmgr_finish(int fd, pid_t pid) {
-	(void)fd;
-	(void)pid;
-}
-
-static int devmgr_open(int mgr_fd, const char *path) {
-	return open(path, O_RDONLY | O_NONBLOCK);
-}
-
-/* ---- 每个按键在屏幕上对应的信息 ---- */
 struct wsk_keypress {
 	xkb_keysym_t sym;
 	char name[128];
