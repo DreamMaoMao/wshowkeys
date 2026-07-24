@@ -55,7 +55,6 @@ executable(
 	'wshowkeys',
 	files(
 		'main.c',
-		'pango.c',
 	),
 	dependencies: [
 		cairo,
