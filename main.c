@@ -17,6 +17,7 @@
 #include <xkbcommon/xkbcommon.h>
 #include <cairo/cairo.h>
 #include <pango/pangocairo.h>
+#include <linux/input-event-codes.h>
 #include "wlr-layer-shell-unstable-v1-client-protocol.h"
 #include "xdg-output-unstable-v1-client-protocol.h"
 
@@ -117,15 +118,12 @@ static void pango_printf(cairo_t *cairo, const char *font, int scale,
     g_object_unref(layout);
 }
 
-/* -------- 设备管理器（简化实现，替换 devmgr.h） -------- */
+/* -------- 设备管理器（简化实现） -------- */
 #ifndef INPUTDEVPATH
 #define INPUTDEVPATH "/dev/input/"
 #endif
 
 static int devmgr_start(int *fd, pid_t *pid, const char *path) {
-    // 简单实现：直接打开 /dev/input/event* 的方式不可靠，
-    // 这里假设 libinput 通过 udev 自行管理，不再需要额外 devmgr。
-    // 保持接口兼容，返回 0 表示成功。
     *fd = -1;
     *pid = 0;
     return 0;
@@ -165,7 +163,8 @@ struct wsk_state {
     const char *font;
     int timeout;
     int length_limit;
-    bool show_mods;   /* -M 选项控制 */
+    bool show_mods;           /* -M 选项控制 */
+    bool show_mouse_buttons;  /* -U 选项控制 */
 
     struct wl_display *display;
     struct wl_registry *registry;
@@ -200,6 +199,9 @@ struct wsk_state {
     int alt_l_hold, alt_r_hold;
     int super_l_hold, supre_r_hold;
     int shift_l_hold, shift_r_hold;
+
+    /* 鼠标按钮状态 */
+    int mouse_left, mouse_middle, mouse_right;
 
     char current_combination_key[128];
     char prev_combination_keye[128];
@@ -312,7 +314,7 @@ static void get_text_metrics(cairo_t *cairo, const char *font, const char *text,
     g_object_unref(layout);
 }
 
-/* 计算修饰键面板的固定像素尺寸 */
+/* 计算修饰键面板的固定像素尺寸（包含可选鼠标按钮） */
 static void calc_mods_size(struct wsk_state *state, int scale,
                            uint32_t *width, uint32_t *height) {
     cairo_surface_t *dummy = cairo_recording_surface_create(CAIRO_CONTENT_COLOR_ALPHA, NULL);
@@ -323,6 +325,8 @@ static void calc_mods_size(struct wsk_state *state, int scale,
     const int num_mods = 4;
     const int pad_h = 8, pad_v = 4, gap = 8;
     int max_tw = 0, max_th = 0, max_bl = 0;
+
+    /* 修饰键文字尺寸 */
     for (int i = 0; i < num_mods; i++) {
         int tw, th, bl;
         get_text_metrics(cairo, mod_font, mod_names[i], scale, &tw, &th, &bl);
@@ -330,15 +334,29 @@ static void calc_mods_size(struct wsk_state *state, int scale,
         if (th > max_th) max_th = th;
         if (bl > max_bl) max_bl = bl;
     }
+
+    /* 鼠标按钮文字尺寸（只影响宽度，不影响 box 高度） */
+    if (state->show_mouse_buttons) {
+        const char *mouse_names[] = {"L", "M", "R"};
+        for (int i = 0; i < 3; i++) {
+            int tw, th, bl;
+            get_text_metrics(cairo, mod_font, mouse_names[i], scale, &tw, &th, &bl);
+            if (tw > max_tw) max_tw = tw;
+            if (th > max_th) max_th = th;
+            if (bl > max_bl) max_bl = bl;
+        }
+    }
+
     int box_w = max_tw + 2 * pad_h;
     int box_h = max_th + 2 * pad_v;
-    *width = num_mods * box_w + (num_mods - 1) * gap;
+    int total_boxes = num_mods + (state->show_mouse_buttons ? 3 : 0);
+    *width = total_boxes * box_w + (total_boxes - 1) * gap;
     *height = box_h;
     cairo_destroy(cairo);
     cairo_surface_destroy(dummy);
 }
 
-/* 只绘制修饰键框和文字，不绘制背景 */
+/* 只绘制修饰键框和文字（含可选鼠标按钮） */
 static void render_mods_only(cairo_t *cairo, struct wsk_state *state, int scale,
                              uint32_t *width, uint32_t *height) {
     char mod_font[256];
@@ -354,6 +372,8 @@ static void render_mods_only(cairo_t *cairo, struct wsk_state *state, int scale,
     const int pad_h = 8, pad_v = 4, gap = 8;
 
     int max_tw = 0, max_th = 0, max_bl = 0;
+
+    /* 先测量所有修饰键文字尺寸 */
     for (int i = 0; i < num_mods; i++) {
         int tw, th, bl;
         get_text_metrics(cairo, mod_font, mod_names[i], scale, &tw, &th, &bl);
@@ -361,16 +381,30 @@ static void render_mods_only(cairo_t *cairo, struct wsk_state *state, int scale,
         if (th > max_th) max_th = th;
         if (bl > max_bl) max_bl = bl;
     }
+
+    /* 如果显示鼠标按钮，测量其文字以确保 box 足够大 */
+    if (state->show_mouse_buttons) {
+        const char *mouse_names[] = {"L", "M", "R"};
+        for (int i = 0; i < 3; i++) {
+            int tw, th, bl;
+            get_text_metrics(cairo, mod_font, mouse_names[i], scale, &tw, &th, &bl);
+            if (tw > max_tw) max_tw = tw;
+            if (th > max_th) max_th = th;
+            if (bl > max_bl) max_bl = bl;
+        }
+    }
+
     int box_w = max_tw + 2 * pad_h;
     int box_h = max_th + 2 * pad_v;
-    uint32_t total_w = num_mods * box_w + (num_mods - 1) * gap;
+    int total_boxes = num_mods + (state->show_mouse_buttons ? 3 : 0);
+    uint32_t total_w = total_boxes * box_w + (total_boxes - 1) * gap;
     uint32_t total_h = box_h;
 
+    /* 绘制修饰键按钮 */
     for (int i = 0; i < num_mods; i++) {
         int x = i * (box_w + gap);
         int y = 0;
 
-        /* 未激活时也使用 state.background，不再透明 */
         if (mod_active[i])
             cairo_set_source_u32(cairo, state->specialfg);
         else
@@ -392,7 +426,6 @@ static void render_mods_only(cairo_t *cairo, struct wsk_state *state, int scale,
         PangoRectangle logical;
         pango_layout_get_pixel_extents(layout, NULL, &logical);
         int tw = logical.width;
-
         int text_x = x + pad_h + (max_tw - tw) / 2;
         int text_y = y + pad_v + max_bl;
 
@@ -400,6 +433,49 @@ static void render_mods_only(cairo_t *cairo, struct wsk_state *state, int scale,
         pango_cairo_show_layout(cairo, layout);
         g_object_unref(layout);
     }
+
+    /* 绘制鼠标按钮（如果启用） */
+    if (state->show_mouse_buttons) {
+        const char *mouse_names[] = {"L", "M", "R"};
+        bool mouse_active[] = {
+            state->mouse_left,
+            state->mouse_middle,
+            state->mouse_right
+        };
+        for (int i = 0; i < 3; i++) {
+            int x = (num_mods + i) * (box_w + gap);
+            int y = 0;
+
+            if (mouse_active[i])
+                cairo_set_source_u32(cairo, state->specialfg);
+            else
+                cairo_set_source_u32(cairo, state->background);
+            cairo_rectangle(cairo, x, y, box_w, box_h);
+            cairo_fill_preserve(cairo);
+            cairo_set_source_u32(cairo, state->foreground);
+            cairo_set_line_width(cairo, 2.0);
+            cairo_stroke(cairo);
+
+            cairo_set_source_u32(cairo, mouse_active[i] ? state->background : state->foreground);
+
+            PangoLayout *layout = pango_cairo_create_layout(cairo);
+            PangoFontDescription *desc = pango_font_description_from_string(mod_font);
+            pango_layout_set_font_description(layout, desc);
+            pango_font_description_free(desc);
+            pango_layout_set_text(layout, mouse_names[i], -1);
+
+            PangoRectangle logical;
+            pango_layout_get_pixel_extents(layout, NULL, &logical);
+            int tw = logical.width;
+            int text_x = x + pad_h + (max_tw - tw) / 2;
+            int text_y = y + pad_v + max_bl;
+
+            cairo_move_to(cairo, text_x, text_y);
+            pango_cairo_show_layout(cairo, layout);
+            g_object_unref(layout);
+        }
+    }
+
     *width = total_w;
     *height = total_h;
 }
@@ -836,6 +912,24 @@ static void clear_full_keylink(struct wsk_state *state) {
 
 static void handle_libinput_event(struct wsk_state *state,
                                   struct libinput_event *event) {
+    /* 处理鼠标按键事件 */
+    if (libinput_event_get_type(event) == LIBINPUT_EVENT_POINTER_BUTTON) {
+        struct libinput_event_pointer *pev =
+            libinput_event_get_pointer_event(event);
+        uint32_t button = libinput_event_pointer_get_button(pev);
+        enum libinput_button_state bstate =
+            libinput_event_pointer_get_button_state(pev);
+        int pressed = (bstate == LIBINPUT_BUTTON_STATE_PRESSED);
+        switch (button) {
+            case BTN_LEFT:   state->mouse_left = pressed;   break;
+            case BTN_MIDDLE: state->mouse_middle = pressed; break;
+            case BTN_RIGHT:  state->mouse_right = pressed;  break;
+            default: return; /* 忽略其他按键 */
+        }
+        set_dirty(state);
+        return;
+    }
+
     if (!state->xkb_state) return;
     if (libinput_event_get_type(event) != LIBINPUT_EVENT_KEYBOARD_KEY) return;
 
@@ -1047,10 +1141,11 @@ int main(int argc, char *argv[]) {
     state.length_limit = 100;
     state.combination_keye_repetition = 1;
     state.pending_clear = false;
-    state.show_mods = false;   /* 默认不显示修饰键面板 */
+    state.show_mods = false;
+    state.show_mouse_buttons = false;
 
     int c;
-    while ((c = getopt(argc, argv, "hb:f:s:F:t:a:m:o:l:M")) != -1) {
+    while ((c = getopt(argc, argv, "hb:f:s:F:t:a:m:o:l:MU")) != -1) {
         switch (c) {
         case 'l': state.length_limit = atoi(optarg); break;
         case 'b': state.background = parse_color(optarg); break;
@@ -1070,6 +1165,7 @@ int main(int argc, char *argv[]) {
             break;
         case 'm': margin = atoi(optarg); break;
         case 'M': state.show_mods = true; break;
+        case 'U': state.show_mouse_buttons = true; break;
         case 'o':
             fprintf(stderr, "-o is unimplemented\n");
             return 0;
@@ -1077,10 +1173,14 @@ int main(int argc, char *argv[]) {
             fprintf(stderr,
                     "usage: wshowkeys [-b|-f|-s #RRGGBB[AA]] [-F font] "
                     "[-t timeout]\n\t[-a top|left|right|bottom] [-m margin] "
-                    "[-M] [-o output] [-l numOfLengthLimit]\n");
+                    "[-M] [-U] [-o output] [-l numOfLengthLimit]\n");
             return 1;
         }
     }
+
+    /* -U 自动启用 -M，确保面板可见 */
+    if (state.show_mouse_buttons)
+        state.show_mods = true;
 
     state.udev = udev_new();
     if (!state.udev) { ret = 1; goto exit; }
@@ -1106,10 +1206,8 @@ int main(int argc, char *argv[]) {
     wl_seat_add_listener(state.seat, &wl_seat_listener, &state);
     wl_display_roundtrip(state.display);
 
-    /* 获取当前 scale（默认为 1） */
     int scale = state.output ? state.output->scale : 1;
 
-    /* 只有当 -M 启用时才创建修饰键面板 */
     uint32_t mods_surf_h = 0;
     if (state.show_mods) {
         uint32_t mods_pixel_w, mods_pixel_h;
@@ -1140,7 +1238,6 @@ int main(int argc, char *argv[]) {
         wl_surface_commit(state.mods_surface);
     }
 
-    /* 创建按键 surface，如果显示 mods 面板则增加底部间距 */
     const int keys_gap = 4;
     state.keys_surface = wl_compositor_create_surface(state.compositor);
     assert(state.keys_surface);
