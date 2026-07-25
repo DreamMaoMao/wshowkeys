@@ -271,6 +271,8 @@ static void custome_key_name(char *name) {
 		strcpy(name, "\\");
 	} else if (strcmp(name, "BackSpace") == 0) {
 		strcpy(name, "⌫ ");
+	} else if (strcmp(name, "Delete") == 0) {
+		strcpy(name, "Del ");
 	} else if (strcmp(name, "Caps_Lock") == 0) {
 		strcpy(name, "Caps ");
 	} else if (strcmp(name, "Left") == 0) {
@@ -281,6 +283,8 @@ static void custome_key_name(char *name) {
 		strcpy(name, "⇩ ");
 	} else if (strcmp(name, "Right") == 0) {
 		strcpy(name, "⇨ ");
+	} else if (strcmp(name, "KP_Delete") == 0) {
+		strcpy(name, ".");
 	} else if (strcmp(name, "KP_Insert") == 0) {
 		strcpy(name, "0");
 	} else if (strcmp(name, "KP_End") == 0) {
@@ -301,8 +305,6 @@ static void custome_key_name(char *name) {
 		strcpy(name, "8");
 	} else if (strcmp(name, "KP_Prior") == 0) {
 		strcpy(name, "9");
-	} else if (strcmp(name, "KP_Delete") == 0) {
-		strcpy(name, ".");
 	} else if (strcmp(name, "KP_Enter") == 0) {
 		strcpy(name, "⏎ ");
 	}
@@ -1185,10 +1187,17 @@ static void handle_libinput_event(struct wsk_state *state,
 	assert(keypress);
 	keypress->sym = keysym;
 	xkb_keysym_get_name(keypress->sym, keypress->name, sizeof(keypress->name));
+
 	if (xkb_state_key_get_utf8(state->xkb_state, keycode, keypress->utf8,
 							   sizeof(keypress->utf8)) <= 0 ||
-		keypress->utf8[0] <= ' ')
+		keypress->utf8[0] <= ' ') {
 		keypress->utf8[0] = '\0';
+	}
+
+	// 强制清空 Delete 和 KP_Delete 的 utf8，避免被当成可打印字符
+	if (keysym == XKB_KEY_Delete || keysym == XKB_KEY_KP_Delete) {
+		keypress->utf8[0] = '\0';
+	}
 
 	calc_key_render_width(state, keypress);
 
