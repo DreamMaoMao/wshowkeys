@@ -76,7 +76,7 @@ wshowkeys [-b|-f|-s #RRGGBB[AA]] [-F font] [-t timeout]
 - *-a top|left|right|bottom*: anchor the keystrokes to an edge. May be specified
   twice.
 - *-m margin*: set a margin (in pixels) from the nearest edge
-- *-l lenmax*: set the key layer lenmax
+- *-l lenmax*: set the key layer max length(px)
 - *-o output*: request wshowkeys is shown on the specified output
   (unimplemented)
 - *-M*: show modifier keys
@@ -85,5 +85,5 @@ wshowkeys [-b|-f|-s #RRGGBB[AA]] [-F font] [-t timeout]
 
 example:
 ```bash
-wshowkeys -a bottom -F 'Sans Bold 30' -s '#B5B520ff' -f  '#ecd29cff' -b '#201B1488' -l 60 -t 500 -M -U -S
+wshowkeys -a bottom -F 'Sans Bold 30' -s '#B5B520ff' -f  '#ecd29cff' -b '#201B1488' -l 600 -t 500 -M -U -S
 ```

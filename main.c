@@ -136,6 +136,7 @@ struct wsk_keypress {
 	xkb_keysym_t sym;
 	char name[128];
 	char utf8[128];
+	int render_width; /* 实际渲染像素宽度 */
 	struct wsk_keypress *next;
 };
 
@@ -156,10 +157,10 @@ struct wsk_state {
 	uint32_t foreground, background, specialfg;
 	const char *font;
 	int timeout;
-	int length_limit;
-	bool show_mods;			 // 是否显示修饰键面板，-M
-	bool show_mouse_buttons; // 是否显示鼠标按键状态，-U
-	bool show_scroll;		 // 是否显示滚轮状态，-S
+	int length_limit; /* 最大像素宽度 */
+	bool show_mods;
+	bool show_mouse_buttons;
+	bool show_scroll;
 
 	struct wl_display *display;
 	struct wl_registry *registry;
@@ -170,7 +171,6 @@ struct wsk_state {
 	struct zxdg_output_manager_v1 *output_mgr;
 	struct zwlr_layer_shell_v1 *layer_shell;
 
-	// 两个 layer surface：上面的是修饰键 / 鼠标 / 滚轮指示器，下面的是按键记录
 	struct wl_surface *keys_surface;
 	struct zwlr_layer_surface_v1 *keys_layer_surface;
 	uint32_t keys_width, keys_height;
@@ -194,10 +194,7 @@ struct wsk_state {
 	int super_l_hold, supre_r_hold;
 	int shift_l_hold, shift_r_hold;
 
-	// 鼠标三个按钮的按下状态
 	int mouse_left, mouse_middle, mouse_right;
-
-	// 滚轮方向是否激活（短暂高亮）
 	int scroll_up_active;
 	int scroll_down_active;
 	struct timespec last_scroll;
@@ -206,16 +203,20 @@ struct wsk_state {
 	char prev_combination_keye[128];
 	int combination_keye_repetition;
 
-	// 超时后不立刻清屏，先打标记，等下一次按键才真正清除
 	bool pending_clear;
 };
 
-// 提前声明，后面实现
+/* 提前声明 */
 static void clear_full_keylink(struct wsk_state *state);
 static void set_dirty(struct wsk_state *state);
+static void calc_key_render_width(struct wsk_state *state,
+								  struct wsk_keypress *key);
 
 static struct pool_buffer buffer_mods;
 static struct pool_buffer buffer_keys;
+
+/* 用于测量文本宽度的全局 cairo 上下文 */
+static cairo_t *measure_cairo = NULL;
 
 /* ---------- 工具函数 ---------- */
 static void cairo_set_source_u32(cairo_t *cairo, uint32_t color) {
@@ -240,34 +241,7 @@ to_cairo_subpixel_order(enum wl_output_subpixel subpixel) {
 	}
 }
 
-// 估算一个按键名在屏幕上占多少“字符宽度”，用于限制总长度
-static int get_char_width(char *name) {
-	if (strstr("⏎ ␣ ⇦ ⇧ ⇨ ", name))
-		return 4;
-	if (strstr("⌫ F12 F10 F11  Esc ", name))
-		return 5;
-	if (strstr("ijl-\\*()!,./[]{}012", name))
-		return 1;
-	if (strstr("-=+abcdefghkmnoqrstuvwxyz@#$%^&?><", name))
-		return 2;
-	if (strstr("F1F2F3F4F5F6F7F8F93456789", name))
-		return 3;
-	if (strstr(" Ctrl+", name))
-		return 8;
-	if (strstr(" Alt+", name))
-		return 6;
-	if (strstr(" Shift+", name))
-		return 10;
-	if (strstr(" Super+", name))
-		return 10;
-	if (strstr("Tab ", name))
-		return 10;
-	if (strstr("Caps ", name))
-		return 8;
-	return strlen(name);
-}
-
-// 把一些键的原始名字替换成好看一点的符号
+/* 将一些键的原始名字替换成好看一点的符号 */
 static void custome_key_name(char *name) {
 	if (strcmp(name, "Return") == 0) {
 		strcpy(name, "⏎ ");
@@ -334,7 +308,32 @@ static void custome_key_name(char *name) {
 	}
 }
 
-// 从主字体名派生出用于修饰键 / 指示器的小号字体
+/* 计算某个按键在屏幕上实际渲染的像素宽度，并存入 key->render_width */
+static void calc_key_render_width(struct wsk_state *state,
+								  struct wsk_keypress *key) {
+	if (!measure_cairo) {
+		cairo_surface_t *surf =
+			cairo_recording_surface_create(CAIRO_CONTENT_COLOR_ALPHA, NULL);
+		measure_cairo = cairo_create(surf);
+		cairo_surface_destroy(surf);
+	}
+
+	char temp_name[128];
+	const char *display_text;
+	if (key->utf8[0] != '\0') {
+		display_text = key->utf8;
+	} else {
+		strcpy(temp_name, key->name);
+		custome_key_name(temp_name);
+		display_text = temp_name;
+	}
+
+	int w, h, bl;
+	get_text_size(measure_cairo, state->font, &w, &h, &bl, 1, "%s",
+				  display_text);
+	key->render_width = w;
+}
+
 static void get_mod_font(const char *font, char *mod_font, size_t buf_size) {
 	int size = 24;
 	const char *last_space = strrchr(font, ' ');
@@ -349,7 +348,6 @@ static void get_mod_font(const char *font, char *mod_font, size_t buf_size) {
 	snprintf(mod_font, buf_size, "Sans Bold %d", size);
 }
 
-// 用 Pango 量一段文本的像素尺寸和基线偏移
 static void get_text_metrics(cairo_t *cairo, const char *font, const char *text,
 							 int scale, int *width, int *height,
 							 int *baseline) {
@@ -366,7 +364,6 @@ static void get_text_metrics(cairo_t *cairo, const char *font, const char *text,
 	g_object_unref(layout);
 }
 
-// 计算整个指示器面板需要的像素尺寸（修饰键 + 可选鼠标 + 可选滚轮）
 static void calc_mods_size(struct wsk_state *state, int scale, uint32_t *width,
 						   uint32_t *height) {
 	cairo_surface_t *dummy =
@@ -379,7 +376,6 @@ static void calc_mods_size(struct wsk_state *state, int scale, uint32_t *width,
 	const int pad_h = 8, pad_v = 4, gap = 8;
 	int max_tw = 0, max_th = 0, max_bl = 0;
 
-	// 修饰键
 	for (int i = 0; i < num_mods; i++) {
 		int tw, th, bl;
 		get_text_metrics(cairo, mod_font, mod_names[i], scale, &tw, &th, &bl);
@@ -391,7 +387,6 @@ static void calc_mods_size(struct wsk_state *state, int scale, uint32_t *width,
 			max_bl = bl;
 	}
 
-	// 鼠标按钮 L M R
 	if (state->show_mouse_buttons) {
 		const char *mouse_names[] = {"L", "M", "R"};
 		for (int i = 0; i < 3; i++) {
@@ -407,7 +402,6 @@ static void calc_mods_size(struct wsk_state *state, int scale, uint32_t *width,
 		}
 	}
 
-	// 滚轮 ▲ ▼
 	if (state->show_scroll) {
 		const char *scroll_names[] = {"▲", "▼"};
 		for (int i = 0; i < 2; i++) {
@@ -436,7 +430,7 @@ static void calc_mods_size(struct wsk_state *state, int scale, uint32_t *width,
 	cairo_surface_destroy(dummy);
 }
 
-// 只绘制指示器面板的内容（不画整个 surface 的背景），返回像素宽高
+/* ---------- 绘制函数（仅绘制内容，不负责创建缓冲区和提交） ---------- */
 static void render_mods_only(cairo_t *cairo, struct wsk_state *state, int scale,
 							 uint32_t *width, uint32_t *height) {
 	char mod_font[256];
@@ -451,7 +445,6 @@ static void render_mods_only(cairo_t *cairo, struct wsk_state *state, int scale,
 
 	int max_tw = 0, max_th = 0, max_bl = 0;
 
-	// 先测量所有可能出现的文字，找出最大宽度 / 高度 / 基线
 	for (int i = 0; i < num_mods; i++) {
 		int tw, th, bl;
 		get_text_metrics(cairo, mod_font, mod_names[i], scale, &tw, &th, &bl);
@@ -503,7 +496,6 @@ static void render_mods_only(cairo_t *cairo, struct wsk_state *state, int scale,
 
 	int box_index = 0;
 
-	// 绘制四个修饰键
 	for (int i = 0; i < num_mods; i++) {
 		int x = box_index * (box_w + gap);
 		int y = 0;
@@ -540,7 +532,6 @@ static void render_mods_only(cairo_t *cairo, struct wsk_state *state, int scale,
 		box_index++;
 	}
 
-	// 绘制鼠标左中右键（如果启用）
 	if (state->show_mouse_buttons) {
 		const char *mouse_names[] = {"L", "M", "R"};
 		bool mouse_active[] = {state->mouse_left, state->mouse_middle,
@@ -582,7 +573,6 @@ static void render_mods_only(cairo_t *cairo, struct wsk_state *state, int scale,
 		}
 	}
 
-	// 绘制滚轮方向（如果启用）
 	if (state->show_scroll) {
 		const char *scroll_names[] = {"▲", "▼"};
 		bool scroll_active[] = {state->scroll_up_active,
@@ -628,34 +618,33 @@ static void render_mods_only(cairo_t *cairo, struct wsk_state *state, int scale,
 	*height = total_h;
 }
 
-// 只绘制按键行（不画背景），返回像素宽高
 static void render_keys_only(cairo_t *cairo, struct wsk_state *state, int scale,
 							 uint32_t *width, uint32_t *height) {
 	uint32_t w = 0, h = 0;
 	struct wsk_keypress *key = state->keys;
 	while (key) {
 		bool special = false;
-		char *name = key->utf8;
-		if (!name[0]) {
-			special = true;
-			cairo_set_source_u32(cairo, state->specialfg);
-			name = key->name;
+		char name_buf[128];
+		const char *display_text;
+		if (key->utf8[0] != '\0') {
+			display_text = key->utf8;
 		} else {
-			cairo_set_source_u32(cairo, state->foreground);
+			strcpy(name_buf, key->name);
+			custome_key_name(name_buf);
+			display_text = name_buf;
+			special = true;
 		}
+
+		if (special)
+			cairo_set_source_u32(cairo, state->specialfg);
+		else
+			cairo_set_source_u32(cairo, state->foreground);
 
 		cairo_move_to(cairo, w, 0);
 		int tw, th;
-		if (special) {
-			custome_key_name(name);
-			get_text_size(cairo, state->font, &tw, &th, NULL, scale, "%s",
-						  name);
-			pango_printf(cairo, state->font, scale, "%s", name);
-		} else {
-			get_text_size(cairo, state->font, &tw, &th, NULL, scale, "%s",
-						  name);
-			pango_printf(cairo, state->font, scale, "%s", name);
-		}
+		get_text_size(cairo, state->font, &tw, &th, NULL, scale, "%s",
+					  display_text);
+		pango_printf(cairo, state->font, scale, "%s", display_text);
 		w += tw;
 		if ((int)h < th)
 			h = th;
@@ -665,7 +654,7 @@ static void render_keys_only(cairo_t *cairo, struct wsk_state *state, int scale,
 	*height = h;
 }
 
-// 绘制完整一帧到修饰键 surface
+/* ---------- 核心渲染：同时处理尺寸变化与缓冲区提交 ---------- */
 static void render_mods_frame(struct wsk_state *state) {
 	if (!state->show_mods || !state->mods_surface || !state->mods_width ||
 		!state->mods_height)
@@ -696,38 +685,44 @@ static void render_mods_frame(struct wsk_state *state) {
 	uint32_t w, h;
 	render_mods_only(cairo, state, scale, &w, &h);
 
-	if (w != state->mods_width || h != state->mods_height) {
-		zwlr_layer_surface_v1_set_size(state->mods_layer_surface, w / scale,
-									   h / scale);
-		wl_surface_commit(state->mods_surface);
-	} else {
-		if (!create_buffer(state->shm, &buffer_mods, state->mods_width * scale,
-						   state->mods_height * scale,
-						   WL_SHM_FORMAT_ARGB8888)) {
-			cairo_destroy(cairo);
-			cairo_surface_destroy(recorder);
-			return;
-		}
-		cairo_t *shm = buffer_mods.cairo;
-		cairo_save(shm);
-		cairo_set_operator(shm, CAIRO_OPERATOR_CLEAR);
-		cairo_paint(shm);
-		cairo_restore(shm);
-		cairo_set_source_surface(shm, recorder, 0.0, 0.0);
-		cairo_paint(shm);
+	uint32_t new_w = w / scale, new_h = h / scale;
+	if (new_w < 1)
+		new_w = 1;
+	if (new_h < 1)
+		new_h = 1;
 
-		wl_surface_set_buffer_scale(state->mods_surface, scale);
-		wl_surface_attach(state->mods_surface, buffer_mods.buffer, 0, 0);
-		wl_surface_damage_buffer(state->mods_surface, 0, 0, state->mods_width,
-								 state->mods_height);
-		wl_surface_commit(state->mods_surface);
-		destroy_buffer(&buffer_mods);
+	/* 尺寸变化：立即更新尺寸并提交新缓冲区 */
+	if (new_w != state->mods_width || new_h != state->mods_height) {
+		state->mods_width = new_w;
+		state->mods_height = new_h;
+		zwlr_layer_surface_v1_set_size(state->mods_layer_surface, new_w, new_h);
 	}
+
+	if (!create_buffer(state->shm, &buffer_mods, state->mods_width * scale,
+					   state->mods_height * scale, WL_SHM_FORMAT_ARGB8888)) {
+		cairo_destroy(cairo);
+		cairo_surface_destroy(recorder);
+		return;
+	}
+	cairo_t *shm = buffer_mods.cairo;
+	cairo_save(shm);
+	cairo_set_operator(shm, CAIRO_OPERATOR_CLEAR);
+	cairo_paint(shm);
+	cairo_restore(shm);
+	cairo_set_source_surface(shm, recorder, 0.0, 0.0);
+	cairo_paint(shm);
+
+	wl_surface_set_buffer_scale(state->mods_surface, scale);
+	wl_surface_attach(state->mods_surface, buffer_mods.buffer, 0, 0);
+	wl_surface_damage_buffer(state->mods_surface, 0, 0, state->mods_width,
+							 state->mods_height);
+	wl_surface_commit(state->mods_surface);
+	destroy_buffer(&buffer_mods);
+
 	cairo_destroy(cairo);
 	cairo_surface_destroy(recorder);
 }
 
-// 绘制完整一帧到按键 surface
 static void render_keys_frame(struct wsk_state *state) {
 	if (!state->keys_surface || !state->keys_width || !state->keys_height)
 		return;
@@ -763,53 +758,59 @@ static void render_keys_frame(struct wsk_state *state) {
 	if (new_h < 1)
 		new_h = 1;
 
-	if (new_h != state->keys_height || new_w != state->keys_width) {
+	/* 尺寸变化：立即更新尺寸并提交新缓冲区 */
+	if (new_w != state->keys_width || new_h != state->keys_height) {
+		state->keys_width = new_w;
+		state->keys_height = new_h;
 		zwlr_layer_surface_v1_set_size(state->keys_layer_surface, new_w, new_h);
-		wl_surface_commit(state->keys_surface);
-	} else {
-		if (!create_buffer(state->shm, &buffer_keys, state->keys_width * scale,
-						   state->keys_height * scale,
-						   WL_SHM_FORMAT_ARGB8888)) {
-			cairo_destroy(cairo);
-			cairo_surface_destroy(recorder);
-			return;
-		}
-		cairo_t *shm = buffer_keys.cairo;
-		cairo_save(shm);
-		cairo_set_operator(shm, CAIRO_OPERATOR_CLEAR);
-		cairo_paint(shm);
-		cairo_restore(shm);
-		cairo_set_source_surface(shm, recorder, 0.0, 0.0);
-		cairo_paint(shm);
-
-		wl_surface_set_buffer_scale(state->keys_surface, scale);
-		wl_surface_attach(state->keys_surface, buffer_keys.buffer, 0, 0);
-		wl_surface_damage_buffer(state->keys_surface, 0, 0, state->keys_width,
-								 state->keys_height);
-		wl_surface_commit(state->keys_surface);
-		destroy_buffer(&buffer_keys);
 	}
+
+	if (!create_buffer(state->shm, &buffer_keys, state->keys_width * scale,
+					   state->keys_height * scale, WL_SHM_FORMAT_ARGB8888)) {
+		cairo_destroy(cairo);
+		cairo_surface_destroy(recorder);
+		return;
+	}
+	cairo_t *shm = buffer_keys.cairo;
+	cairo_save(shm);
+	cairo_set_operator(shm, CAIRO_OPERATOR_CLEAR);
+	cairo_paint(shm);
+	cairo_restore(shm);
+	cairo_set_source_surface(shm, recorder, 0.0, 0.0);
+	cairo_paint(shm);
+
+	wl_surface_set_buffer_scale(state->keys_surface, scale);
+	wl_surface_attach(state->keys_surface, buffer_keys.buffer, 0, 0);
+	wl_surface_damage_buffer(state->keys_surface, 0, 0, state->keys_width,
+							 state->keys_height);
+	wl_surface_commit(state->keys_surface);
+	destroy_buffer(&buffer_keys);
+
 	cairo_destroy(cairo);
 	cairo_surface_destroy(recorder);
 }
 
-// 标记需要重绘，同时刷新两个 layer surface
 static void set_dirty(struct wsk_state *state) {
 	if (state->show_mods)
 		render_mods_frame(state);
 	render_keys_frame(state);
 }
 
-/* ---------- Layer surface 回调 ---------- */
+/* ---------- Layer surface 回调（仅处理合成器触发的尺寸确认） ---------- */
 static void mods_layer_surface_configure(void *data,
 										 struct zwlr_layer_surface_v1 *surface,
 										 uint32_t serial, uint32_t width,
 										 uint32_t height) {
 	struct wsk_state *state = data;
-	state->mods_width = width;
-	state->mods_height = height;
-	zwlr_layer_surface_v1_ack_configure(surface, serial);
-	render_mods_frame(state);
+	/* 仅当合成器返回的尺寸与当前记录不同时才更新并重绘 */
+	if (width != state->mods_width || height != state->mods_height) {
+		state->mods_width = width;
+		state->mods_height = height;
+		zwlr_layer_surface_v1_ack_configure(surface, serial);
+		render_mods_frame(state);
+	} else {
+		zwlr_layer_surface_v1_ack_configure(surface, serial);
+	}
 }
 static void mods_layer_surface_closed(void *data,
 									  struct zwlr_layer_surface_v1 *surface) {
@@ -827,14 +828,18 @@ static void keys_layer_surface_configure(void *data,
 										 uint32_t serial, uint32_t width,
 										 uint32_t height) {
 	struct wsk_state *state = data;
-	state->keys_width = width;
-	state->keys_height = height;
-	zwlr_layer_surface_v1_ack_configure(surface, serial);
-	render_keys_frame(state);
+	if (width != state->keys_width || height != state->keys_height) {
+		state->keys_width = width;
+		state->keys_height = height;
+		zwlr_layer_surface_v1_ack_configure(surface, serial);
+		render_keys_frame(state);
+	} else {
+		zwlr_layer_surface_v1_ack_configure(surface, serial);
+	}
 }
 static void keys_layer_surface_closed(void *data,
 									  struct zwlr_layer_surface_v1 *surface) {
-	// 按键窗口关闭我们不管，程序结束时会统一清理
+	/* ignored */
 }
 static const struct zwlr_layer_surface_v1_listener keys_layer_surface_listener =
 	{
@@ -842,7 +847,6 @@ static const struct zwlr_layer_surface_v1_listener keys_layer_surface_listener =
 		.closed = keys_layer_surface_closed,
 };
 
-// surface 进入 / 离开某个输出时，更新当前 scale 等
 static void surface_enter(void *data, struct wl_surface *wl_surface,
 						  struct wl_output *output) {
 	struct wsk_state *state = data;
@@ -859,7 +863,7 @@ static const struct wl_surface_listener wl_surface_listener = {
 	.leave = surface_leave,
 };
 
-/* ---------- 键盘相关 ---------- */
+/* ---------- 键盘相关（Wayland 协议，实际输入走 libinput） ---------- */
 static void keyboard_keymap(void *data, struct wl_keyboard *wl_keyboard,
 							uint32_t format, int32_t fd, uint32_t size) {
 	struct wsk_state *state = data;
@@ -1073,13 +1077,16 @@ static void change_numchar_to_special(char *target, char numchar) {
 static void attach_repeat_flag(struct wsk_state *state, int num, int num_len) {
 	struct wsk_keypress *repeat_flag = calloc(1, sizeof(struct wsk_keypress));
 	strcpy(repeat_flag->name, "ₓ");
+	calc_key_render_width(state, repeat_flag);
 	attach_to_last(state, repeat_flag);
+
 	char *repeat_num_char = calloc(num_len + 1, sizeof(char));
 	sprintf(repeat_num_char, "%d", num);
 	for (int i = 0; i < num_len; i++) {
 		struct wsk_keypress *repeat_num =
 			calloc(1, sizeof(struct wsk_keypress));
 		change_numchar_to_special(repeat_num->name, repeat_num_char[i]);
+		calc_key_render_width(state, repeat_num);
 		attach_to_last(state, repeat_num);
 	}
 	free(repeat_num_char);
@@ -1109,10 +1116,8 @@ static void safe_strcat(char *dest, size_t dest_size, const char *src) {
 	}
 }
 
-// 处理来自 libinput 的事件：按键、鼠标按钮、滚轮
 static void handle_libinput_event(struct wsk_state *state,
 								  struct libinput_event *event) {
-	// 鼠标按钮事件
 	if (libinput_event_get_type(event) == LIBINPUT_EVENT_POINTER_BUTTON) {
 		struct libinput_event_pointer *pev =
 			libinput_event_get_pointer_event(event);
@@ -1131,13 +1136,12 @@ static void handle_libinput_event(struct wsk_state *state,
 			state->mouse_right = pressed;
 			break;
 		default:
-			return; // 其他按键不关心
+			return;
 		}
 		set_dirty(state);
 		return;
 	}
 
-	// 滚轮事件（仅垂直方向）
 	if (libinput_event_get_type(event) == LIBINPUT_EVENT_POINTER_AXIS) {
 		struct libinput_event_pointer *pev =
 			libinput_event_get_pointer_event(event);
@@ -1157,13 +1161,11 @@ static void handle_libinput_event(struct wsk_state *state,
 		return;
 	}
 
-	// 不是键盘事件就忽略
 	if (!state->xkb_state)
 		return;
 	if (libinput_event_get_type(event) != LIBINPUT_EVENT_KEYBOARD_KEY)
 		return;
 
-	// 如果标记了超时待清，先清掉旧的按键显示
 	if (state->pending_clear) {
 		clear_full_keylink(state);
 	}
@@ -1188,16 +1190,17 @@ static void handle_libinput_event(struct wsk_state *state,
 		keypress->utf8[0] <= ' ')
 		keypress->utf8[0] = '\0';
 
+	calc_key_render_width(state, keypress);
+
 	memset(state->current_combination_key, 0,
 		   sizeof(state->current_combination_key));
 	int special_key_num = 0;
 
 	switch (key_state) {
 	case LIBINPUT_KEY_STATE_RELEASED:
-		// 松开修饰键时更新对应的 hold 标志
 		if (strlen(keypress->name) > 2 &&
-			strstr("Control_LControl_RAlt_LAlt_RSuper_LSuper_RShift_LShift_R"
-				   "Meta_LMeta_R",
+			strstr("Control_LControl_RAlt_LAlt_RSuper_LSuper_RShift_LShift_"
+				   "RMeta_LMeta_R",
 				   keypress->name)) {
 			if (strcmp(keypress->name, "Control_L") == 0)
 				state->ctrl_l_hold = 0;
@@ -1221,10 +1224,9 @@ static void handle_libinput_event(struct wsk_state *state,
 		break;
 	case LIBINPUT_KEY_STATE_PRESSED:
 		if (strlen(keypress->name) > 2 &&
-			strstr("Control_LControl_RAlt_LAlt_RSuper_LSuper_RShift_LShift_R"
-				   "Meta_LMeta_R",
+			strstr("Control_LControl_RAlt_LAlt_RSuper_LSuper_RShift_LShift_"
+				   "RMeta_LMeta_R",
 				   keypress->name)) {
-			// 按下修饰键
 			if (strcmp(keypress->name, "Control_L") == 0)
 				state->ctrl_l_hold = 1;
 			else if (strcmp(keypress->name, "Control_R") == 0)
@@ -1244,15 +1246,14 @@ static void handle_libinput_event(struct wsk_state *state,
 			else if (strcmp(keypress->name, "Shift_R") == 0)
 				state->shift_r_hold = 1;
 		} else {
-			// 普通按键，前面可能挂着当前按住的修饰键
 			struct wsk_keypress **link = &state->keys;
 			while (*link)
 				link = &(*link)->next;
 
-			// 安全追加修饰键字符串
 			if (state->shift_l_hold) {
 				struct wsk_keypress *k = calloc(1, sizeof(struct wsk_keypress));
 				strcpy(k->name, "Shift_L");
+				calc_key_render_width(state, k);
 				safe_strcat(state->current_combination_key,
 							sizeof(state->current_combination_key), "Shift_L");
 				special_key_num++;
@@ -1262,6 +1263,7 @@ static void handle_libinput_event(struct wsk_state *state,
 			if (state->shift_r_hold) {
 				struct wsk_keypress *k = calloc(1, sizeof(struct wsk_keypress));
 				strcpy(k->name, "Shift_R");
+				calc_key_render_width(state, k);
 				safe_strcat(state->current_combination_key,
 							sizeof(state->current_combination_key), "Shift_R");
 				special_key_num++;
@@ -1271,6 +1273,7 @@ static void handle_libinput_event(struct wsk_state *state,
 			if (state->ctrl_l_hold) {
 				struct wsk_keypress *k = calloc(1, sizeof(struct wsk_keypress));
 				strcpy(k->name, "Control_L");
+				calc_key_render_width(state, k);
 				safe_strcat(state->current_combination_key,
 							sizeof(state->current_combination_key),
 							"Control_L");
@@ -1281,6 +1284,7 @@ static void handle_libinput_event(struct wsk_state *state,
 			if (state->ctrl_r_hold) {
 				struct wsk_keypress *k = calloc(1, sizeof(struct wsk_keypress));
 				strcpy(k->name, "Control_R");
+				calc_key_render_width(state, k);
 				safe_strcat(state->current_combination_key,
 							sizeof(state->current_combination_key),
 							"Control_R");
@@ -1291,6 +1295,7 @@ static void handle_libinput_event(struct wsk_state *state,
 			if (state->super_l_hold) {
 				struct wsk_keypress *k = calloc(1, sizeof(struct wsk_keypress));
 				strcpy(k->name, "Super_L");
+				calc_key_render_width(state, k);
 				safe_strcat(state->current_combination_key,
 							sizeof(state->current_combination_key), "Super_L");
 				special_key_num++;
@@ -1300,6 +1305,7 @@ static void handle_libinput_event(struct wsk_state *state,
 			if (state->supre_r_hold) {
 				struct wsk_keypress *k = calloc(1, sizeof(struct wsk_keypress));
 				strcpy(k->name, "Super_R");
+				calc_key_render_width(state, k);
 				safe_strcat(state->current_combination_key,
 							sizeof(state->current_combination_key), "Super_R");
 				special_key_num++;
@@ -1309,6 +1315,7 @@ static void handle_libinput_event(struct wsk_state *state,
 			if (state->alt_l_hold) {
 				struct wsk_keypress *k = calloc(1, sizeof(struct wsk_keypress));
 				strcpy(k->name, "Alt_L");
+				calc_key_render_width(state, k);
 				safe_strcat(state->current_combination_key,
 							sizeof(state->current_combination_key), "Alt_L");
 				special_key_num++;
@@ -1318,6 +1325,7 @@ static void handle_libinput_event(struct wsk_state *state,
 			if (state->alt_r_hold) {
 				struct wsk_keypress *k = calloc(1, sizeof(struct wsk_keypress));
 				strcpy(k->name, "Alt_R");
+				calc_key_render_width(state, k);
 				safe_strcat(state->current_combination_key,
 							sizeof(state->current_combination_key), "Alt_R");
 				special_key_num++;
@@ -1330,7 +1338,6 @@ static void handle_libinput_event(struct wsk_state *state,
 						sizeof(state->current_combination_key), keypress->name);
 			special_key_num++;
 
-			// 检测是否是连续的同一组合键，如果是就显示重复次数
 			if (strcmp(state->prev_combination_keye, "") != 0 &&
 				strcmp(state->prev_combination_keye,
 					   state->current_combination_key) == 0) {
@@ -1399,7 +1406,7 @@ int main(int argc, char *argv[]) {
 	state.foreground = 0xFFFFFFFF;
 	state.font = "Sans Bold 40";
 	state.timeout = 200;
-	state.length_limit = 100;
+	state.length_limit = 800;
 	state.combination_keye_repetition = 1;
 	state.pending_clear = false;
 	state.show_mods = false;
@@ -1458,12 +1465,11 @@ int main(int argc, char *argv[]) {
 			fprintf(stderr,
 					"usage: wshowkeys [-b|-f|-s #RRGGBB[AA]] [-F font] "
 					"[-t timeout]\n\t[-a top|left|right|bottom] [-m margin] "
-					"[-M] [-U] [-S] [-o output] [-l numOfLengthLimit]\n");
+					"[-M] [-U] [-S] [-o output] [-l max_pixel_width]\n");
 			return 1;
 		}
 	}
 
-	// 鼠标或滚轮指示器自动打开修饰键面板
 	if (state.show_mouse_buttons || state.show_scroll)
 		state.show_mods = true;
 
@@ -1579,7 +1585,6 @@ int main(int argc, char *argv[]) {
 		struct timespec now;
 		clock_gettime(CLOCK_MONOTONIC, &now);
 
-		// 计算 poll 超时：取按键超时和滚轮超时中较小的那个
 		int poll_timeout = -1;
 		if (state.keys) {
 			long elapsed_ms = (now.tv_sec - state.last_key.tv_sec) * 1000 +
@@ -1618,22 +1623,20 @@ int main(int argc, char *argv[]) {
 			break;
 		clock_gettime(CLOCK_MONOTONIC, &now);
 
-		// 如果按键太长，从头部开始丢弃
+		/* 基于实际像素宽度截断过长按键 */
 		if (state.keys) {
-			int all_key_len = 0;
-			char *temp_name = calloc(1, 129);
+			int total_width = 0;
 			struct wsk_keypress *key = state.keys;
 			while (key) {
-				strcpy(temp_name, key->name);
-				custome_key_name(temp_name);
-				all_key_len += get_char_width(temp_name);
+				total_width += key->render_width;
 				key = key->next;
 			}
-			free(temp_name);
-			if (all_key_len > state.length_limit) {
-				struct wsk_keypress *next = state.keys->next;
-				free(state.keys);
-				state.keys = next;
+
+			while (total_width > state.length_limit && state.keys) {
+				struct wsk_keypress *old = state.keys;
+				state.keys = old->next;
+				total_width -= old->render_width;
+				free(old);
 				set_dirty(&state);
 			}
 		}
@@ -1654,6 +1657,10 @@ int main(int argc, char *argv[]) {
 	}
 
 exit:
+	if (measure_cairo) {
+		cairo_destroy(measure_cairo);
+		measure_cairo = NULL;
+	}
 	if (state.mods_layer_surface)
 		zwlr_layer_surface_v1_destroy(state.mods_layer_surface);
 	if (state.keys_layer_surface)
